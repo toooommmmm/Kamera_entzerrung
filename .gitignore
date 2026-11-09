@@ -1,0 +1,8 @@
+# Videos und Bilder nicht ins Repo
+*.mov
+*.MOV
+*.mp4
+*.MP4
+__pycache__/
+*.pyc
+.venv/

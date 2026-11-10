@@ -98,6 +98,51 @@ Entzerren macht das Bild geometrisch korrekt (gerade Linien bleiben gerade), abe
 
 Objekte vor oder hinter der Messebene haben einen anderen Massstab.
 
+## Auswertung Wasserstrahl (Kompositbild → Klicken → Meter → Fit)
+
+Ablauf für die Strahl-Videos (Plan: `waterjet_trajectory_plan.md`, Schritte 2–6):
+
+| Datei | Zweck |
+|---|---|
+| `zeitfenster.csv` | pro Clip Start/Ende (s), in denen der Strahl konstant läuft und niemand durchs Bild geht |
+| `kompositbild.py` | Schritt 2: Kompositbilder pro Clip → `komposite/` (Std, Hell, Dunkel, Hintergrund in Farbe, Overlay) |
+| `referenzen.csv` | Pfosten und ihr horizontaler Abstand `x_m` von der Düse (selbst ausfüllen) |
+| `messungen.csv` | pro Clip: Lauf, gemessener Düsenwinkel, Aufprall laut Protokoll (selbst ausfüllen) |
+| `strahl.py` | Schritte 3–6 (Klickfenster, Meter, Fit, Plots) |
+| `klickfenster.py`, `ebene.py`, `modell.py`, `daten.py` | Bausteine von `strahl.py` |
+| `punkte/<clip>.json` | Klickpunkte (entzerrte Pixel) – Handarbeit, wird mit versioniert |
+
+```bash
+python kompositbild.py "../ipztest_06_11/iphone_videos/*.mov"   # Schritt 2
+python strahl.py klicken 0_a                                     # Schritt 3 (+4 live)
+python strahl.py metrisch                                        # Schritt 4 für alle Clips
+python strahl.py fit                                             # Schritte 5+6 → auswertung/
+```
+
+**Klickfenster:** Die Kompositbilder werden beim Laden entzerrt, geklickt wird im entzerrten Bild (gestrichelt = kalibrierter Bereich). Zoomen/Verschieben mit der Werkzeugleiste; solange Lupe oder Hand aktiv ist, zählen Klicks nicht.
+
+| Taste | Bedeutung |
+|---|---|
+| `d` | Düsenspitze (1 Punkt) |
+| `s` | Strahl-Mittellinie (beliebig viele Punkte) |
+| `a` | Aufprall im Video (1 Punkt, Vergleich mit Protokoll) |
+| `g` | Bodenlinie: ≥ 2 Punkte entlang des Bodens, gerade Linie = z = 0 |
+| `r` | Pfosten-Marken: Pfosten aus `referenzen.csv` der Reihe nach, je ≥ 2 aufeinanderfolgende 1-m-Marken; `Enter` nächster, `n` überspringen |
+| `1` `2` `3` | Bild Overlay / Std / Hintergrund |
+| `z`, rechte Maustaste | letzten Punkt löschen |
+| `w` | speichern (auch automatisch beim Schliessen) |
+
+Sobald Bodenlinie und ≥ 2 Pfosten geklickt sind, zeigt das Fenster Meter an (unten in der Statuszeile für die Mausposition, an den Strahlpunkten, und die Residuen der Referenzen).
+
+**Pixel → Meter (Schritt 4):** Pfostenachse ∩ Bodenlinie = Bodenpunkt (x_p, 0); Marken = (x_p, h_p + k·1 m) mit unbekannter Höhe h_p der untersten Marke. Homographie und alle h_p werden gemeinsam gefittet. Gilt nur in der Strahlebene (Pfosten müssen in dieser Ebene stehen).
+
+**Fit (Schritte 5+6):** z(x, θ) = Σ c_j(θ)·x^j mit c_j polynomial in θ, alle Clips gemeinsam, gewichtet (Klick-σ über die Abbildung in Meter, beim Aufprall zusätzlich σ 0,10–0,25 m je nach Winkel für den Sprühkegel).
+
+- θ = gemessener Düsenwinkel aus `messungen.csv`, **absolut** (Weltkoordinaten); die Drohnenneigung ist schon enthalten, darum kein Offset.
+- Aufprall: Standardmässig zählt der **im Bild geklickte** Aufprall (`a`). Der Protokollwert wird nur zum Vergleich gezeigt (vor Ort schwer zu schätzen, Lauf 1 von einer anderen Person) und kommt nur mit `--mit-protokoll-aufprall` in den Fit. Das Klickfenster zeigt den Protokollwert bewusst nicht an.
+
+Optionen: `python strahl.py fit --help` (z.B. `--grad-x 3`, `--mit-protokoll-aufprall`, global `--sigma-klick 3`).
+
 ## So funktioniert die Kalibrierung
 
 **Kameramodell (OpenCV):** Kameramatrix `K` mit Brennweite `fx, fy` und Bildmitte `cx, cy`, dazu Verzerrung `D = (k1, k2, p1, p2, k3)`. Radial (k): Punkte werden mit wachsendem Abstand von der Bildmitte nach aussen/innen geschoben. Tangential (p): Linse nicht ganz parallel zum Sensor.

@@ -196,6 +196,8 @@ def verarbeite(pfad, ausgabe, args, fenster):
     print(f"{name}: {s['anzahl_bilder']} Bilder ({t0:.1f}-{t1:.1f} s), "
           f"Median aus {s['anzahl_median']} Bildern")
 
+    ausgabe = os.path.join(ausgabe, name)      # ein Unterordner pro Clip: komposite/<clip>/
+    os.makedirs(ausgabe, exist_ok=True)
     gestreckt = {}
     for methode in ("std", "hell", "dunkel"):
         gestreckt[methode] = strecken(s[methode], args.unten, args.oben, args.gamma)

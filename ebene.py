@@ -7,6 +7,11 @@ Referenzen im Bild:
     Pfosten sind Marken mit genau 1 m senkrechtem Abstand, aber keine Marke hat
     eine bekannte absolute Höhe.
 
+Optional: Bodenmarken (Klebeband, Pylonen ...) bei bekanntem x auf dem Boden.
+Der Klick wird senkrecht (im Bild) auf die Bodenlinie projiziert und gilt als
+(x, 0). Sie legen den Massstab entlang des Bodens fest, auch über den letzten
+Pfosten hinaus.
+
 Pro Pfosten wird die Achse (Gerade durch die Marken) mit der Bodenlinie
 geschnitten -> Bodenpunkt (x_p, 0). Die Marken liegen bei (x_p, h_p + k * 1 m),
 wobei k = 0 die unterste geklickte Marke ist und h_p (Höhe der untersten Marke
@@ -128,11 +133,19 @@ class Ebene:
         return J @ self.kovarianz[:8, :8] @ J.T
 
 
-def bestimme_ebene(boden_punkte, pfosten):
-    """Bestimmt die Abbildung aus Bodenlinie und Pfosten.
+def projiziere_auf_gerade(punkt, gerade):
+    """Fusspunkt des Lots von punkt auf die Gerade (Punkt, Richtung)."""
+    p, d = gerade
+    d = np.asarray(d) / np.linalg.norm(d)
+    return np.asarray(p) + np.dot(np.asarray(punkt, np.float64) - p, d) * d
+
+
+def bestimme_ebene(boden_punkte, pfosten, bodenmarken=()):
+    """Bestimmt die Abbildung aus Bodenlinie, Pfosten und optionalen Bodenmarken.
 
     boden_punkte: >= 2 Punkte (u, v) entlang des Bodens.
     pfosten: Liste von dicts {"name", "x_m", "marken": [(u, v), ...]} mit >= 2 Marken.
+    bodenmarken: Liste von (u, v, x_m): Marke auf dem Boden bei bekanntem x (z = 0).
     Gibt eine Ebene zurück oder wirft ValueError mit einer verständlichen Meldung.
     """
     if len(boden_punkte) < 2:
@@ -142,7 +155,7 @@ def bestimme_ebene(boden_punkte, pfosten):
         raise ValueError("mind. 2 Pfosten mit je >= 2 Marken nötig")
     boden = gerade_fit(boden_punkte)
 
-    # Korrespondenzen: (Pfosten-Index, Pixel, x_m, k oder None für Bodenpunkt)
+    # Korrespondenzen: (Pfosten-Index, Pixel, x_m, k oder None für z = 0, Art)
     eintraege = []
     bodenpunkte = {}
     start_offsets = []
@@ -152,12 +165,15 @@ def bestimme_ebene(boden_punkte, pfosten):
         if fuss is None:
             raise ValueError(f"Pfosten {p['name']}: Achse parallel zur Bodenlinie")
         bodenpunkte[p["name"]] = tuple(fuss)
-        eintraege.append((i, fuss, p["x_m"], None))
+        eintraege.append((i, fuss, p["x_m"], None, "boden"))
         for k, m in enumerate(marken):
-            eintraege.append((i, m, p["x_m"], k))
+            eintraege.append((i, m, p["x_m"], k, "marke"))
         # Startwert h_p: Abstand Boden -> unterste Marke in "Markenabständen"
         abstand_marken = np.mean(np.linalg.norm(np.diff(marken, axis=0), axis=1))
         start_offsets.append(np.linalg.norm(marken[0] - fuss) / abstand_marken * MARKEN_ABSTAND_M)
+
+    for u, v, x_m in bodenmarken:
+        eintraege.append((0, projiziere_auf_gerade((u, v), boden), float(x_m), None, "bodenmarke"))
 
     n_p = len(pfosten)
     idx = np.array([e[0] for e in eintraege])
@@ -193,7 +209,7 @@ def bestimme_ebene(boden_punkte, pfosten):
             kov = None
 
     namen = [p["name"] for p in pfosten]
-    liste = [{"pfosten": namen[e[0]], "art": "boden" if e[3] is None else "marke",
+    liste = [{"pfosten": None if e[4] == "bodenmarke" else namen[e[0]], "art": e[4], "x_m": e[2],
               "k": e[3], "dx_m": float(dr[0]), "dz_m": float(dr[1])}
              for e, dr in zip(eintraege, r)]
     return Ebene(erg.x, kov, n_p, namen, liste, bodenpunkte)
@@ -206,7 +222,7 @@ def bestimme_ebene(boden_punkte, pfosten):
 def aus_klickpunkten(punkte, referenzen):
     """Ebene aus der Punktliste des Klickfensters.
 
-    punkte: Liste von dicts {"typ", "x", "y", ["pfosten"]} (entzerrte Pixel).
+    punkte: Liste von dicts {"typ", "x", "y", ["pfosten"], ["x_m"]} (entzerrte Pixel).
     referenzen: Liste von dicts {"name", "x_m"} (aus referenzen.csv).
     Wirft ValueError, wenn die Referenzen nicht reichen.
     """
@@ -216,4 +232,6 @@ def aus_klickpunkten(punkte, referenzen):
         marken = [(p["x"], p["y"]) for p in punkte
                   if p["typ"] == "pfosten_marke" and p.get("pfosten") == ref["name"]]
         pfosten.append({"name": ref["name"], "x_m": ref["x_m"], "marken": marken})
-    return bestimme_ebene(boden, pfosten)
+    bodenmarken = [(p["x"], p["y"], p["x_m"]) for p in punkte
+                   if p["typ"] == "bodenmarke" and p.get("x_m") is not None]
+    return bestimme_ebene(boden, pfosten, bodenmarken)

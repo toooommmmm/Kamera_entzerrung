@@ -229,7 +229,8 @@ def zusammenfassung(modell, clips, zeilen):
     quellen = [n for a, n in (("aufprall", "geklickt (Bild)"), ("aufprall_log", "Protokoll")) if a in im_fit]
     t.append("Aufprall im Fit: " + (", ".join(quellen) if quellen else "keiner"))
     t.append("")
-    t.append("Pro Clip:  θ [°]   Aufprall Bild [m]   Protokoll [m]   Modell [m]       "
+    t.append("θ = gemessener Winkel (messungen.csv), Soll = Servo-Winkel (nur Info)")
+    t.append("Pro Clip:  Soll [°]  θ [°]   Aufprall Bild [m]   Protokoll [m]   Modell [m]       "
              "RMS Strahl [cm]   Referenzen RMS [cm]")
     for c in sorted(clips, key=lambda c: (c["theta"], c["clip"])):
         xl, sl = modell.aufprall(c["theta"])
@@ -238,7 +239,8 @@ def zusammenfassung(modell, clips, zeilen):
         video = [p for p in c["punkte"] if p["typ"] == "aufprall"]
         bild = "     -      " if not video else f"{video[0]['x']:5.2f} ± {np.hypot(video[0]['sx'], c['sigma_aufprall']):.2f}"
         log = "  -  " if c["aufprall_log"] is None else f"{c['aufprall_log']:5.2f}"
-        t.append(f"  {c['clip']:<8} {c['theta']:6.1f}   {bild:>15}     {log:>8}       {xl:6.2f} ± {sl:.2f}"
+        soll = "  -  " if c["winkel_soll"] is None else f"{c['winkel_soll']:5g}"
+        t.append(f"  {c['clip']:<8} {soll:>5}  {c['theta']:6.1f}   {bild:>15}     {log:>8}       {xl:6.2f} ± {sl:.2f}"
                  f"      {rms:6.1f}            {c['ebene_rms_cm']:5.1f}")
 
     t.append("")
@@ -257,6 +259,46 @@ def zusammenfassung(modell, clips, zeilen):
     return "\n".join(t)
 
 
+def winkel_gruppen(clips):
+    """{gemessenes θ: [Clips mit diesem θ]}, nach θ sortiert. Gleiches θ = gleiche Kurve."""
+    gruppen = {}
+    for c in sorted(clips, key=lambda c: (c["theta"], c["clip"])):
+        gruppen.setdefault(round(c["theta"], 3), []).append(c)
+    return gruppen
+
+
+def speichere_kurven(modell, clips, pfad):
+    """Eine Zeile pro gemessenem Winkel θ: Kurve z(x) = c0 + c1 x + c2 x² ... und Aufprall.
+
+    θ ist der GEMESSENE Winkel aus messungen.csv; der Soll-Winkel (Servo) steht nur
+    zur Information dabei.
+    """
+    felder = (["theta_gemessen_grad", "winkel_soll_grad", "clips"]
+              + [f"c{j}" for j in range(modell.grad_x + 1)]
+              + ["aufprall_modell_m", "sigma_aufprall_modell_m"])
+    with open(pfad, "w", newline="", encoding="utf-8") as f:
+        w = csv.writer(f)
+        w.writerow(felder)
+        for th, gruppe in winkel_gruppen(clips).items():
+            soll = sorted({c["winkel_soll"] for c in gruppe}, key=lambda s: (s is None, s))
+            xl, sl = modell.aufprall(th)
+            w.writerow([f"{th:g}", " ".join(f"{s:g}" for s in soll if s is not None),
+                        " ".join(c["clip"] for c in gruppe)]
+                       + [f"{c:.6g}" for c in modell.koeffizienten(th)]
+                       + [f"{xl:.4f}", f"{sl:.4f}"])
+
+
+def lade_modell(pfad):
+    """fit_modell.npz -> Modell, z.B. zum Interpolieren: lade_modell(p).z(x, theta_gemessen).
+
+    Die gespeicherte Kovarianz ist schon mit chi²_red skaliert, darum hier chi2_red = 1.
+    """
+    d = np.load(pfad)
+    if float(d["skala_grad"]) != SKALA_GRAD:
+        raise ValueError(f"{pfad}: Winkelskala {float(d['skala_grad'])} statt {SKALA_GRAD}")
+    return Modell(int(d["grad_x"]), int(d["grad_theta"]), d["param"], d["kovarianz"], 1.0, 0)
+
+
 def speichere_tabelle(zeilen, pfad):
     felder = ["clip", "winkel_soll", "theta", "art", "x", "z", "sx", "sz", "sigma_eff", "residuum"]
     with open(pfad, "w", newline="", encoding="utf-8") as f:
@@ -272,13 +314,17 @@ def plots(modell, clips, zeilen, ordner):
     import matplotlib.pyplot as plt
 
     os.makedirs(ordner, exist_ok=True)
-    sollwinkel = sorted({c["winkel_soll"] for c in clips}, key=lambda w: (w is None, w))
-    farben = {w: plt.cm.viridis(i / max(1, len(sollwinkel) - 1)) for i, w in enumerate(sollwinkel)}
+    # Farbe und Beschriftung nach dem GEMESSENEN Winkel θ (messungen.csv), nicht nach dem Soll-Winkel
+    gruppen = winkel_gruppen(clips)
+    th_min, th_max = min(gruppen), max(gruppen)
+
+    def farbe(theta):
+        return plt.cm.viridis(0.0 if th_max == th_min else (theta - th_min) / (th_max - th_min))
 
     # 1. Bahnen
     fig, ax = plt.subplots(figsize=(10, 5.5))
     for c in clips:
-        f = farben[c["winkel_soll"]]
+        f = farbe(c["theta"])
         pts = [z for z in zeilen if z["clip"] == c["clip"] and z["art"] in ("duese", "strahl")]
         if pts:
             ax.errorbar([p["x"] for p in pts], [p["z"] for p in pts],
@@ -290,21 +336,26 @@ def plots(modell, clips, zeilen, ordner):
                         fmt="v", ms=6, color=f, mec="k", mew=0.5, capsize=3)
         if c["aufprall_log"] is not None:   # nur Vergleich (ausser --mit-protokoll-aufprall)
             ax.plot([c["aufprall_log"]], [0], "|", ms=12, mew=1.5, color=f)
-        pts = pts + [z for z in zeilen if z["clip"] == c["clip"] and z["art"] == "aufprall"]
-        xl, _ = modell.aufprall(c["theta"])
+    # eine Kurve pro gemessenem Winkel (Clips mit gleichem θ haben dieselbe Kurve)
+    for th, gruppe in gruppen.items():
+        f = farbe(th)
+        namen = {c["clip"] for c in gruppe}
+        pts = [z for z in zeilen if z["clip"] in namen]
+        xl, _ = modell.aufprall(th)
         x_ende = xl if np.isfinite(xl) else max([p["x"] for p in pts] + [1.0])
         xs = np.linspace(0, x_ende, 200)
-        zs, ss = modell.z(xs, c["theta"]), modell.sigma_z(xs, c["theta"])
+        zs, ss = modell.z(xs, th), modell.sigma_z(xs, th)
         ax.plot(xs, zs, "-", color=f, lw=1)
         ax.fill_between(xs, zs - ss, zs + ss, color=f, alpha=0.15, lw=0)
-    for w in sollwinkel:
-        ax.plot([], [], "-o", color=farben[w], ms=3, label=f"Soll {w}°")
+        ax.plot([], [], "-o", color=f, ms=3,
+                label=f"θ = {th:g}° ({', '.join(c['clip'] for c in gruppe)})")
     ax.plot([], [], "v", color="gray", mec="k", label="Aufprall geklickt (Bild)")
     ax.plot([], [], "|", ms=12, mew=1.5, color="gray", label="Aufprall Protokoll (Vergleich)")
     ax.axhline(0, color="k", lw=0.6)
     ax.set_xlabel("horizontaler Abstand x [m]")
     ax.set_ylabel("Höhe über Boden z [m]")
-    ax.set_title("Strahl-Mittellinie: Messpunkte und gemeinsamer Fit (Band = ±1σ)")
+    ax.set_title("Strahl-Mittellinie: Messpunkte und gemeinsamer Fit (Band = ±1σ)\n"
+                 "θ = gemessener Düsenwinkel (messungen.csv)", fontsize=10)
     ax.legend(fontsize=8, ncol=2)
     ax.grid(alpha=0.3)
     fig.tight_layout()
@@ -317,7 +368,7 @@ def plots(modell, clips, zeilen, ordner):
     for z in zeilen:
         marker = "v" if z["art"] == "aufprall_log" else "o"
         ax.errorbar(z["x"], z["residuum"] * 100, yerr=z["sigma_eff"] * 100, fmt=marker, ms=3,
-                    color=farben[z["winkel_soll"]], elinewidth=0.7)
+                    color=farbe(z["theta"]), elinewidth=0.7)
     ax.axhline(0, color="k", lw=0.6)
     ax.set_xlabel("x [m]")
     ax.set_ylabel("Residuum z - Modell [cm]")
@@ -337,11 +388,11 @@ def plots(modell, clips, zeilen, ordner):
     ax.fill_between(ths, xl[:, 0] - xl[:, 1], xl[:, 0] + xl[:, 1], color="C0", alpha=0.2, lw=0)
     for c in clips:
         if c["aufprall_log"] is not None:
-            ax.plot(c["theta"], c["aufprall_log"], "s", mfc="none", color=farben[c["winkel_soll"]])
+            ax.plot(c["theta"], c["aufprall_log"], "s", mfc="none", color=farbe(c["theta"]))
         video = [p for p in c["punkte"] if p["typ"] == "aufprall"]
         if video:
             ax.errorbar(c["theta"], video[0]["x"], yerr=np.hypot(video[0]["sx"], c["sigma_aufprall"]),
-                        fmt="v", color=farben[c["winkel_soll"]], mec="k", mew=0.5, capsize=3)
+                        fmt="v", color=farbe(c["theta"]), mec="k", mew=0.5, capsize=3)
     ax.plot([], [], "v", color="gray", mec="k", label="geklickt (Bild)")
     ax.plot([], [], "s", mfc="none", color="gray", label="Protokoll (Vergleich)")
     ax.set_xlabel("Düsenwinkel θ, absolut [°]")

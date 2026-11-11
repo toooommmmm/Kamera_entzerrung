@@ -5,7 +5,7 @@
   python strahl.py fit           Schritte 5+6: gemeinsamer Fit, Unsicherheiten, Plots
 
 Daten:
-  komposite/<clip>_*.png   aus kompositbild.py (Originalpixel, werden beim Laden entzerrt)
+  komposite/<clip>/<clip>_*.png  aus kompositbild.py (Originalpixel, werden beim Laden entzerrt)
   referenzen.csv           Pfosten und ihr horizontaler Abstand x von der Düse
   messungen.csv            pro Clip: Lauf, gemessener Düsenwinkel, Aufprall laut Protokoll
   punkte/<clip>.json       Klickpunkte (entzerrte Pixel), geschrieben vom Klickfenster
@@ -103,10 +103,11 @@ def befehl_fit(args):
     with open(os.path.join(args.ausgabe, "fit_ergebnis.txt"), "w", encoding="utf-8") as f:
         f.write(einstellungen + "\n\n" + text + "\n")
     modell.speichere_tabelle(zeilen, os.path.join(args.ausgabe, "fit_punkte.csv"))
+    modell.speichere_kurven(m, clips, os.path.join(args.ausgabe, "kurven.csv"))
     np.savez(os.path.join(args.ausgabe, "fit_modell.npz"), param=m.param, kovarianz=m.kovarianz,
              grad_x=m.grad_x, grad_theta=m.grad_theta, skala_grad=modell.SKALA_GRAD)
     modell.plots(m, clips, zeilen, args.ausgabe)
-    print(f"Gespeichert in {args.ausgabe}/: fit_ergebnis.txt, fit_punkte.csv, fit_modell.npz, "
+    print(f"Gespeichert in {args.ausgabe}/: fit_ergebnis.txt, fit_punkte.csv, kurven.csv, fit_modell.npz, "
           f"bahnen/residuen/aufprall.png+pdf")
 
 

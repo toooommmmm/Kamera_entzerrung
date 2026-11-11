@@ -105,7 +105,7 @@ Ablauf für die Strahl-Videos (Plan: `waterjet_trajectory_plan.md`, Schritte 2�
 | Datei | Zweck |
 |---|---|
 | `zeitfenster.csv` | pro Clip Start/Ende (s), in denen der Strahl konstant läuft und niemand durchs Bild geht |
-| `kompositbild.py` | Schritt 2: Kompositbilder pro Clip → `komposite/` (Std, Hell, Dunkel, Hintergrund in Farbe, Overlay) |
+| `kompositbild.py` | Schritt 2: Kompositbilder pro Clip → `komposite/<clip>/` (Std, Hell, Dunkel, Hintergrund in Farbe, Overlay) |
 | `referenzen.csv` | Pfosten und ihr horizontaler Abstand `x_m` von der Düse (selbst ausfüllen) |
 | `messungen.csv` | pro Clip: Lauf, gemessener Düsenwinkel, Aufprall laut Protokoll (selbst ausfüllen) |
 | `strahl.py` | Schritte 3–6 (Klickfenster, Meter, Fit, Plots) |
@@ -128,13 +128,15 @@ python strahl.py fit                                             # Schritte 5+6 
 | `a` | Aufprall im Video (1 Punkt, Vergleich mit Protokoll) |
 | `g` | Bodenlinie: ≥ 2 Punkte entlang des Bodens, gerade Linie = z = 0 |
 | `r` | Pfosten-Marken: Pfosten aus `referenzen.csv` der Reihe nach, je ≥ 2 aufeinanderfolgende 1-m-Marken; `Enter` nächster, `n` überspringen |
-| `1` `2` `3` | Bild Overlay / Std / Hintergrund |
+| `1` `2` `3` `4` | Bild Overlay / Std / Hintergrund / Hell |
+| `m` | Bodenmarke (Klebeband/Pylone) auf dem Boden: klicken, dann x [m] (Abstand von der Düse) eingeben; wird auf die Bodenlinie projiziert = (x, 0) |
 | `z`, rechte Maustaste | letzten Punkt löschen |
+| `x`, `Entf` | Punkt unter der Maus löschen (beliebiger Punkt, nicht nur der letzte) |
 | `w` | speichern (auch automatisch beim Schliessen) |
 
 Sobald Bodenlinie und ≥ 2 Pfosten geklickt sind, zeigt das Fenster Meter an (unten in der Statuszeile für die Mausposition, an den Strahlpunkten, und die Residuen der Referenzen).
 
-**Pixel → Meter (Schritt 4):** Pfostenachse ∩ Bodenlinie = Bodenpunkt (x_p, 0); Marken = (x_p, h_p + k·1 m) mit unbekannter Höhe h_p der untersten Marke. Homographie und alle h_p werden gemeinsam gefittet. Gilt nur in der Strahlebene (Pfosten müssen in dieser Ebene stehen).
+**Pixel → Meter (Schritt 4):** Pfostenachse ∩ Bodenlinie = Bodenpunkt (x_p, 0); Marken = (x_p, h_p + k·1 m) mit unbekannter Höhe h_p der untersten Marke. Optional Bodenmarken = (x, 0), legen den Massstab entlang des Bodens fest (auch jenseits des letzten Pfostens). Homographie und alle h_p werden gemeinsam gefittet. Gilt nur in der Strahlebene (Pfosten müssen in dieser Ebene stehen).
 
 **Fit (Schritte 5+6):** z(x, θ) = Σ c_j(θ)·x^j mit c_j polynomial in θ, alle Clips gemeinsam, gewichtet (Klick-σ über die Abbildung in Meter, beim Aufprall zusätzlich σ 0,10–0,25 m je nach Winkel für den Sprühkegel).
 

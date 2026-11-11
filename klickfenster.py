@@ -9,8 +9,11 @@ Tasten:
   a  Aufprall im Video (1 Punkt)    g  Bodenlinie (>= 2 Punkte)
   r  Pfosten-Marken: Pfosten aus referenzen.csv der Reihe nach,
      Enter = nächster Pfosten, n = Pfosten nicht sichtbar / überspringen
-  1/2/3  Bild Overlay / Std / Hintergrund
+  m  Bodenmarke (Klebeband, Pylone ...): klicken, dann x in m (Abstand von
+     der Düse, horizontal) eingeben
+  1/2/3/4  Bild Overlay / Std / Hintergrund / Hell
   z oder rechte Maustaste  letzten Punkt löschen
+  x oder Entf  Punkt unter der Maus löschen (egal welcher)
   w  speichern (passiert auch beim Schliessen)
 Zoomen:
   - Mausrad: rein/raus um die Mausposition (immer möglich)
@@ -32,16 +35,20 @@ import ebene
 from entzerren import entzerre_punkte, entzerrungs_tabellen, lade_kalibrierung, pruefe_groesse
 from kompositbild import lade_zeitfenster
 
-BILDER = [("overlay", "1"), ("std", "2"), ("hintergrund", "3")]
-EIGENE_TASTEN = {"d", "s", "a", "g", "r", "n", "z", "w", "1", "2", "3", "enter"}
+BILDER = [("overlay", "1"), ("std", "2"), ("hintergrund", "3"), ("hell", "4")]
+LOESCH_TASTEN = {"x", "delete", "backspace"}
+EIGENE_TASTEN = {"d", "s", "a", "g", "r", "m", "n", "z", "w", "1", "2", "3", "4", "enter"} | LOESCH_TASTEN
 FARBEN = {"duese": "cyan", "strahl": "yellow", "aufprall": "magenta",
-          "boden": "lime", "pfosten_marke": "red"}
-MODI = {"d": "duese", "s": "strahl", "a": "aufprall", "g": "boden", "r": "pfosten_marke"}
+          "boden": "lime", "pfosten_marke": "red", "bodenmarke": "orange"}
+MODI = {"d": "duese", "s": "strahl", "a": "aufprall", "g": "boden", "r": "pfosten_marke", "m": "bodenmarke"}
 MODUS_TEXT = {None: "keiner (Taste wählen)", "duese": "Düsenspitze", "strahl": "Strahlpunkte",
-              "aufprall": "Aufprall", "boden": "Bodenlinie", "pfosten_marke": "Pfosten-Marken"}
-HILFE = ("d Düse | s Strahl | a Aufprall | g Boden | r Pfosten (Enter weiter, n überspringen)\n"
-         "1/2/3 Bild | z / rechte Maus: rückgängig | w speichern | "
-         "Zoom: Mausrad, oder Knöpfe 'Zoom +/−' oben (Knopf aus = Punkte setzen)")
+              "aufprall": "Aufprall", "boden": "Bodenlinie", "pfosten_marke": "Pfosten-Marken",
+              "bodenmarke": "Bodenmarken (Klick, dann x eingeben)"}
+HILFE = ("d Düse | s Strahl | a Aufprall | g Boden | r Pfosten (Enter weiter, n überspringen) | "
+         "m Bodenmarke\n"
+         "1/2/3/4 Bild | z / rechte Maus: rückgängig | x / Entf: Punkt unter der Maus löschen | "
+         "w speichern | Zoom: Mausrad, oder Knöpfe 'Zoom +/−' oben")
+LOESCH_RADIUS_PX = 15      # so nah (Bildschirmpixel) muss die Maus am Punkt sein
 
 
 def _matplotlib_tasten_freigeben():
@@ -64,7 +71,7 @@ class Klickfenster:
         self.bilder = self._lade_bilder(komposite, K, D, groesse)
         self.huelle = self._entzerrte_huelle(huelle, K, D)
 
-        self.punkte = []          # chronologisch: {"typ", "x", "y", ["pfosten"]}
+        self.punkte = []          # chronologisch: {"typ", "x", "y", ["pfosten"], ["x_m"]}
         self.modus = None
         self.pfosten_index = 0
         self.ebene = None
@@ -73,7 +80,7 @@ class Klickfenster:
         self.kuenstler = []
         if os.path.exists(self.pfad_json):
             alt = daten.lade_punkte(self.pfad_json)
-            self.punkte = [{k: p[k] for k in ("typ", "x", "y", "pfosten") if k in p} for p in alt["punkte"]]
+            self.punkte = [{k: p[k] for k in ("typ", "x", "y", "pfosten", "x_m") if k in p} for p in alt["punkte"]]
             self.meldung = f"{len(self.punkte)} Punkte aus {self.pfad_json} geladen"
 
     # ------------------------------------------------------------------ Laden
@@ -82,7 +89,10 @@ class Klickfenster:
         karte1, karte2 = entzerrungs_tabellen(K, D, groesse)
         bilder = {}
         for name, _ in BILDER:
-            pfad = os.path.join(ordner, f"{self.clip}_{name}.png")
+            datei = f"{self.clip}_{name}.png"
+            pfad = os.path.join(ordner, self.clip, datei)       # komposite/<clip>/<clip>_<name>.png
+            if not os.path.exists(pfad):
+                pfad = os.path.join(ordner, datei)              # alte, flache Ablage
             if not os.path.exists(pfad):
                 continue
             bild = cv2.imread(pfad)
@@ -240,14 +250,16 @@ class Klickfenster:
 
     def _taste(self, ev):
         t = ev.key
-        if t in MODI:
+        if t in LOESCH_TASTEN:
+            self._punkt_loeschen_bei(ev)
+        elif t in MODI:
             self.modus = MODI[t]
             self.meldung = ""
             if self.modus == "pfosten_marke":
                 self._pfosten_start()
         elif t in ("enter", "n") and self.modus == "pfosten_marke":
             self._naechster_pfosten()
-        elif t in ("1", "2", "3"):
+        elif t in ("1", "2", "3", "4"):
             name = BILDER[int(t) - 1][0]
             if name in self.bilder:
                 self.bild_name = name
@@ -275,13 +287,62 @@ class Klickfenster:
                 self.meldung = "Kein Pfosten aktiv (r drücken, referenzen.csv prüfen)"
                 return
             punkt["pfosten"] = pfosten["name"]
+        if self.modus == "bodenmarke":
+            x_m = self._frage_x_m(x, y)
+            if x_m is None:
+                self.meldung = "Bodenmarke abgebrochen"
+                return
+            punkt["x_m"] = x_m
         self.punkte.append(punkt)
         self.meldung = "" if self.im_bereich(x, y) else "ACHTUNG: Punkt ausserhalb des kalibrierten Bereichs"
+
+    @staticmethod
+    def _beschreibung(p):
+        text = MODUS_TEXT.get(p["typ"], p["typ"]).split(" (")[0]
+        if "pfosten" in p:
+            text += f" ({p['pfosten']})"
+        if "x_m" in p:
+            text += f" (x = {p['x_m']:g} m)"
+        return text
 
     def _rueckgaengig(self):
         if self.punkte:
             p = self.punkte.pop()
-            self.meldung = f"gelöscht: {p['typ']}" + (f" ({p['pfosten']})" if "pfosten" in p else "")
+            self.meldung = f"gelöscht: {self._beschreibung(p)}"
+
+    def _punkt_loeschen_bei(self, ev):
+        """Den Punkt löschen, der der Maus am nächsten ist (auf dem Bildschirm gemessen)."""
+        if ev.inaxes is not self.ax or ev.x is None or not self.punkte:
+            self.meldung = "Zum Löschen die Maus auf einen Punkt im Bild halten"
+            return
+        bildschirm = self.ax.transData.transform([(p["x"], p["y"]) for p in self.punkte])
+        abstand = np.hypot(bildschirm[:, 0] - ev.x, bildschirm[:, 1] - ev.y)
+        i = int(np.argmin(abstand))
+        if abstand[i] > LOESCH_RADIUS_PX:
+            self.meldung = "Kein Punkt unter der Maus (näher ranzoomen oder genauer zeigen)"
+            return
+        p = self.punkte.pop(i)
+        self.meldung = f"gelöscht: {self._beschreibung(p)}"
+
+    def _frage_x_m(self, u, v):
+        """x der Bodenmarke abfragen (Qt-Dialog, sonst Konsole). Vorschlag aus der Abbildung."""
+        bisher = [p["x_m"] for p in self.punkte if p["typ"] == "bodenmarke"]
+        if self.ebene is not None:
+            vorschlag = float(round(self.ebene.nach_metern([[u, v]])[0][0]))
+        else:
+            vorschlag = max(bisher) + 1.0 if bisher else 1.0
+        frage = "Horizontaler Abstand dieser Bodenmarke von der Düse x [m]:"
+        try:
+            from matplotlib.backends.qt_compat import QtWidgets
+            wert, ok = QtWidgets.QInputDialog.getDouble(self.fig.canvas, "Bodenmarke", frage,
+                                                        vorschlag, -100.0, 100.0, 2)
+            return float(wert) if ok else None
+        except Exception:
+            antwort = input(f"{frage} [{vorschlag:g}] ").strip().replace(",", ".")
+            try:
+                return float(antwort) if antwort else vorschlag
+            except ValueError:
+                return None
 
     # ------------------------------------------------------------------ Pfosten
 
@@ -368,10 +429,19 @@ class Klickfenster:
                     neu(ax.plot([fuss[0], oben[0]], [fuss[1], oben[1]], "-", color="red", lw=0.7)[0])
                     neu(ax.plot(*fuss, "s", mfc="none", mec="lime", ms=7)[0])
 
+        for p in self.punkte:
+            if p["typ"] != "bodenmarke":
+                continue
+            neu(ax.annotate(f"{p.get('x_m', float('nan')):g} m", (p["x"], p["y"]), xytext=(4, 6),
+                            textcoords="offset points", color="orange", fontsize=8, weight="bold"))
+            if bodenlinie is not None:
+                fuss = ebene.projiziere_auf_gerade((p["x"], p["y"]), bodenlinie)
+                neu(ax.plot(*fuss, "o", mfc="none", mec="orange", ms=6)[0])
+
         for typ, farbe in FARBEN.items():
             pts = self._punkte_vom_typ(typ)
             if len(pts):
-                marker = "+" if typ in ("strahl", "pfosten_marke", "boden") else "x"
+                marker = "+" if typ in ("strahl", "pfosten_marke", "boden", "bodenmarke") else "x"
                 neu(ax.plot(pts[:, 0], pts[:, 1], marker, color=farbe, ms=10, mew=1.3)[0])
 
         if self.ebene is not None:
@@ -395,7 +465,8 @@ class Klickfenster:
                   f"Zeitfenster: {self.zeitfenster}", "",
                   f"Düse      {anzahl['duese']}", f"Strahl    {anzahl['strahl']}",
                   f"Aufprall  {anzahl['aufprall']}", f"Boden     {anzahl['boden']}",
-                  f"Marken    {anzahl['pfosten_marke']}", "", "Pfosten:"]
+                  f"Marken    {anzahl['pfosten_marke']}", f"Bodenmarken {anzahl['bodenmarke']}",
+                  "", "Pfosten:"]
         for r in self.referenzen:
             n = sum(1 for p in self.punkte if p.get("pfosten") == r["name"])
             x = "x fehlt!" if r["x_m"] is None else f"x={r['x_m']:g} m"
@@ -410,6 +481,9 @@ class Klickfenster:
             zeilen.append(f"  Referenz-Residuen RMS {self.ebene.rms_cm():.1f} cm, max {self.ebene.max_cm():.1f} cm")
             for name, h in self.ebene.offsets.items():
                 zeilen.append(f"  {name}: unterste Marke {h:.3f} m über Boden")
+            for r in self.ebene.residuen:
+                if r["art"] == "bodenmarke":
+                    zeilen.append(f"  Bodenmarke x={r['x_m']:g} m: dx {r['dx_m'] * 100:+.1f} cm")
             for typ, text in (("duese", "Düse"), ("aufprall", "Aufprall")):
                 pts = self._punkte_vom_typ(typ)
                 if len(pts):

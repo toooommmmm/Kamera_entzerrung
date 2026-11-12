@@ -192,9 +192,12 @@ is acceptable. Also, only D2 separates "how well do we know the curve" from "how
   (σ_curve of the landing point 0.27–0.33 m there, 0.15 m in the middle).
 - **Uncertainties too large.** σ_shot is about 1.7× too large (section 4.3). One reason: some of what is counted
   as curvature scatter may really be error in clicking the landing point (the spray cone). The data cannot separate the two.
-- **Parameter σ too small.** In a synthetic test (run on the earlier click data set, 19 clips; not repeated) (20 simulated data sets drawn from D2 itself), the parameters and
-  the scatter values were recovered without bias, but the σ of the strongly correlated parameters δ0, a0, b0 came out
-  1.5–1.8× too small. This hardly affects aiming, because σ_shot is dominated by the scatter terms, which were recovered correctly.
+- **Parameter σ too small.** Synthetic test: 20 data sets simulated from the fitted D2 with the same clips and points
+  (per-shot scatter + click noise), then refitted. The parameters come back with at most small biases (≤ 0.7σ, largest for b1),
+  and the scatter values are recovered well (σ_ε 1.21° vs. 1.32°, σ_α 0.0039 vs. 0.0038, f 0.57 vs. 0.51).
+  But the σ of the strongly correlated parameters δ0, a0, b0 come out 1.7–1.9× too small (the others are about right).
+  This hardly affects aiming, because σ_shot is dominated by the scatter terms, which are recovered correctly.
+  The inverse reproduces the angle exactly in the same test (round trip, error < 10⁻¹²°).
 - **No exit speed.** The coefficients don't give a realistic exit speed (drag is too strong for the leading-order
   approximation). Treat a and b as empirical.
 

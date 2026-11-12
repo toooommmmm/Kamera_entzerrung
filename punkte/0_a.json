@@ -1,0 +1,243 @@
+{
+ "clip": "0_a",
+ "winkel_soll": 0.0,
+ "variante": "a",
+ "kalibrierung": "blackmagic_4k_stab_aus.json",
+ "zeitfenster_s": [
+  16.65,
+  20.0
+ ],
+ "koordinaten": "entzerrte Pixel (Kameramatrix K der Kalibrierung)",
+ "boden_linie": {
+  "punkt": [
+   2071.79,
+   1392.25
+  ],
+  "richtung": [
+   -0.999998,
+   0.002037
+  ]
+ },
+ "pfosten": [
+  {
+   "pfosten": "P1",
+   "x_m": 2.0,
+   "bodenpunkt": [
+    2861.05,
+    1390.64
+   ]
+  },
+  {
+   "pfosten": "P2",
+   "x_m": 4.0,
+   "bodenpunkt": [
+    2298.18,
+    1391.79
+   ]
+  },
+  {
+   "pfosten": "P3",
+   "x_m": 6.0,
+   "bodenpunkt": [
+    1734.93,
+    1392.93
+   ]
+  },
+  {
+   "pfosten": "P4",
+   "x_m": 8.0,
+   "bodenpunkt": [
+    1166.91,
+    1394.09
+   ]
+  },
+  {
+   "pfosten": "P5",
+   "x_m": 10.0,
+   "bodenpunkt": [
+    554.95,
+    1395.34
+   ]
+  }
+ ],
+ "punkte": [
+  {
+   "typ": "pfosten_marke",
+   "x": 2861.74,
+   "y": 1321.81,
+   "pfosten": "P1",
+   "marke_k": 0,
+   "im_kalibrierten_bereich": true
+  },
+  {
+   "typ": "pfosten_marke",
+   "x": 2867.13,
+   "y": 1042.17,
+   "pfosten": "P1",
+   "marke_k": 1,
+   "im_kalibrierten_bereich": true
+  },
+  {
+   "typ": "pfosten_marke",
+   "x": 2870.13,
+   "y": 772.17,
+   "pfosten": "P1",
+   "marke_k": 2,
+   "im_kalibrierten_bereich": true
+  },
+  {
+   "typ": "pfosten_marke",
+   "x": 2309.92,
+   "y": 768.41,
+   "pfosten": "P2",
+   "marke_k": 2,
+   "im_kalibrierten_bereich": true
+  },
+  {
+   "typ": "pfosten_marke",
+   "x": 2305.44,
+   "y": 1038.52,
+   "pfosten": "P2",
+   "marke_k": 1,
+   "im_kalibrierten_bereich": true
+  },
+  {
+   "typ": "pfosten_marke",
+   "x": 2299.34,
+   "y": 1319.15,
+   "pfosten": "P2",
+   "marke_k": 0,
+   "im_kalibrierten_bereich": true
+  },
+  {
+   "typ": "bodenmarke",
+   "x": 2018.01,
+   "y": 1383.01,
+   "x_m": 5.0,
+   "im_kalibrierten_bereich": true
+  },
+  {
+   "typ": "pfosten_marke",
+   "x": 1735.0,
+   "y": 1320.07,
+   "pfosten": "P3",
+   "marke_k": 0,
+   "im_kalibrierten_bereich": true
+  },
+  {
+   "typ": "pfosten_marke",
+   "x": 1735.24,
+   "y": 1035.44,
+   "pfosten": "P3",
+   "marke_k": 1,
+   "im_kalibrierten_bereich": true
+  },
+  {
+   "typ": "pfosten_marke",
+   "x": 1735.51,
+   "y": 757.37,
+   "pfosten": "P3",
+   "marke_k": 2,
+   "im_kalibrierten_bereich": true
+  },
+  {
+   "typ": "bodenmarke",
+   "x": 1448.88,
+   "y": 1400.08,
+   "x_m": 7.0,
+   "im_kalibrierten_bereich": true
+  },
+  {
+   "typ": "pfosten_marke",
+   "x": 1170.5,
+   "y": 1140.09,
+   "pfosten": "P4",
+   "marke_k": 0,
+   "im_kalibrierten_bereich": true
+  },
+  {
+   "typ": "pfosten_marke",
+   "x": 1174.58,
+   "y": 851.39,
+   "pfosten": "P4",
+   "marke_k": 1,
+   "im_kalibrierten_bereich": true
+  },
+  {
+   "typ": "pfosten_marke",
+   "x": 549.31,
+   "y": 836.6,
+   "pfosten": "P5",
+   "marke_k": 1,
+   "im_kalibrierten_bereich": true
+  },
+  {
+   "typ": "pfosten_marke",
+   "x": 552.3,
+   "y": 1132.71,
+   "pfosten": "P5",
+   "marke_k": 0,
+   "im_kalibrierten_bereich": true
+  },
+  {
+   "typ": "boden",
+   "x": 2859.91,
+   "y": 1399.93,
+   "im_kalibrierten_bereich": true
+  },
+  {
+   "typ": "boden",
+   "x": 2298.4,
+   "y": 1381.96,
+   "im_kalibrierten_bereich": true
+  },
+  {
+   "typ": "boden",
+   "x": 1734.55,
+   "y": 1394.09,
+   "im_kalibrierten_bereich": true
+  },
+  {
+   "typ": "boden",
+   "x": 2018.33,
+   "y": 1383.44,
+   "im_kalibrierten_bereich": true
+  },
+  {
+   "typ": "boden",
+   "x": 1447.77,
+   "y": 1401.82,
+   "im_kalibrierten_bereich": true
+  },
+  {
+   "typ": "duese",
+   "x": 3447.78,
+   "y": 1056.46,
+   "im_kalibrierten_bereich": true
+  },
+  {
+   "typ": "strahl",
+   "x": 3303.62,
+   "y": 1061.32,
+   "im_kalibrierten_bereich": true
+  },
+  {
+   "typ": "strahl",
+   "x": 3109.39,
+   "y": 1074.28,
+   "im_kalibrierten_bereich": true
+  },
+  {
+   "typ": "aufprall",
+   "x": 1639.17,
+   "y": 1401.52,
+   "im_kalibrierten_bereich": true
+  },
+  {
+   "typ": "strahl",
+   "x": 2217.37,
+   "y": 1217.12,
+   "im_kalibrierten_bereich": true
+  }
+ ]
+}

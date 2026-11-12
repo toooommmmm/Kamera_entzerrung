@@ -1,0 +1,249 @@
+{
+ "clip": "25",
+ "winkel_soll": 25.0,
+ "variante": "",
+ "kalibrierung": "blackmagic_4k_stab_aus.json",
+ "zeitfenster_s": [
+  3.0,
+  18.0
+ ],
+ "koordinaten": "entzerrte Pixel (Kameramatrix K der Kalibrierung)",
+ "boden_linie": {
+  "punkt": [
+   1802.87,
+   1404.59
+  ],
+  "richtung": [
+   -0.999992,
+   0.004071
+  ]
+ },
+ "pfosten": [
+  {
+   "pfosten": "P1",
+   "x_m": 2.0,
+   "bodenpunkt": [
+    2843.92,
+    1400.35
+   ]
+  },
+  {
+   "pfosten": "P2",
+   "x_m": 4.0,
+   "bodenpunkt": [
+    2283.11,
+    1402.64
+   ]
+  },
+  {
+   "pfosten": "P3",
+   "x_m": 6.0,
+   "bodenpunkt": [
+    1720.04,
+    1404.93
+   ]
+  },
+  {
+   "pfosten": "P4",
+   "x_m": 8.0,
+   "bodenpunkt": [
+    1151.79,
+    1407.24
+   ]
+  },
+  {
+   "pfosten": "P5",
+   "x_m": 10.0,
+   "bodenpunkt": [
+    535.53,
+    1409.75
+   ]
+  }
+ ],
+ "punkte": [
+  {
+   "typ": "duese",
+   "x": 3436.61,
+   "y": 975.99,
+   "im_kalibrierten_bereich": true
+  },
+  {
+   "typ": "strahl",
+   "x": 3397.87,
+   "y": 961.83,
+   "im_kalibrierten_bereich": true
+  },
+  {
+   "typ": "strahl",
+   "x": 3258.44,
+   "y": 913.24,
+   "im_kalibrierten_bereich": true
+  },
+  {
+   "typ": "pfosten_marke",
+   "x": 2844.23,
+   "y": 1327.39,
+   "pfosten": "P1",
+   "marke_k": 0,
+   "im_kalibrierten_bereich": true
+  },
+  {
+   "typ": "pfosten_marke",
+   "x": 2847.71,
+   "y": 1047.85,
+   "pfosten": "P1",
+   "marke_k": 1,
+   "im_kalibrierten_bereich": true
+  },
+  {
+   "typ": "pfosten_marke",
+   "x": 2849.07,
+   "y": 778.71,
+   "pfosten": "P1",
+   "marke_k": 2,
+   "im_kalibrierten_bereich": true
+  },
+  {
+   "typ": "pfosten_marke",
+   "x": 2283.63,
+   "y": 1328.06,
+   "pfosten": "P2",
+   "marke_k": 0,
+   "im_kalibrierten_bereich": true
+  },
+  {
+   "typ": "pfosten_marke",
+   "x": 2287.16,
+   "y": 1047.5,
+   "pfosten": "P2",
+   "marke_k": 1,
+   "im_kalibrierten_bereich": true
+  },
+  {
+   "typ": "pfosten_marke",
+   "x": 2289.15,
+   "y": 778.46,
+   "pfosten": "P2",
+   "marke_k": 2,
+   "im_kalibrierten_bereich": true
+  },
+  {
+   "typ": "bodenmarke",
+   "x": 2003.38,
+   "y": 1395.54,
+   "x_m": 5.0,
+   "im_kalibrierten_bereich": true
+  },
+  {
+   "typ": "pfosten_marke",
+   "x": 1719.69,
+   "y": 1333.41,
+   "pfosten": "P3",
+   "marke_k": 0,
+   "im_kalibrierten_bereich": true
+  },
+  {
+   "typ": "pfosten_marke",
+   "x": 1718.67,
+   "y": 1048.48,
+   "pfosten": "P3",
+   "marke_k": 1,
+   "im_kalibrierten_bereich": true
+  },
+  {
+   "typ": "pfosten_marke",
+   "x": 1717.35,
+   "y": 771.47,
+   "pfosten": "P3",
+   "marke_k": 2,
+   "im_kalibrierten_bereich": true
+  },
+  {
+   "typ": "bodenmarke",
+   "x": 1433.24,
+   "y": 1415.65,
+   "x_m": 7.0,
+   "im_kalibrierten_bereich": true
+  },
+  {
+   "typ": "pfosten_marke",
+   "x": 1153.53,
+   "y": 1156.66,
+   "pfosten": "P4",
+   "marke_k": 0,
+   "im_kalibrierten_bereich": true
+  },
+  {
+   "typ": "pfosten_marke",
+   "x": 1155.53,
+   "y": 868.61,
+   "pfosten": "P4",
+   "marke_k": 1,
+   "im_kalibrierten_bereich": true
+  },
+  {
+   "typ": "pfosten_marke",
+   "x": 531.52,
+   "y": 1154.06,
+   "pfosten": "P5",
+   "marke_k": 0,
+   "im_kalibrierten_bereich": true
+  },
+  {
+   "typ": "pfosten_marke",
+   "x": 526.85,
+   "y": 856.45,
+   "pfosten": "P5",
+   "marke_k": 1,
+   "im_kalibrierten_bereich": true
+  },
+  {
+   "typ": "boden",
+   "x": 2843.44,
+   "y": 1406.02,
+   "im_kalibrierten_bereich": true
+  },
+  {
+   "typ": "boden",
+   "x": 2282.59,
+   "y": 1396.44,
+   "im_kalibrierten_bereich": true
+  },
+  {
+   "typ": "boden",
+   "x": 2004.56,
+   "y": 1391.64,
+   "im_kalibrierten_bereich": true
+  },
+  {
+   "typ": "boden",
+   "x": 1719.44,
+   "y": 1409.82,
+   "im_kalibrierten_bereich": true
+  },
+  {
+   "typ": "boden",
+   "x": 1432.63,
+   "y": 1417.01,
+   "im_kalibrierten_bereich": true
+  },
+  {
+   "typ": "boden",
+   "x": 534.53,
+   "y": 1406.62,
+   "im_kalibrierten_bereich": true
+  },
+  {
+   "typ": "aufprall",
+   "x": 511.36,
+   "y": 1399.28,
+   "im_kalibrierten_bereich": true
+  },
+  {
+   "typ": "strahl",
+   "x": 3071.78,
+   "y": 856.19,
+   "im_kalibrierten_bereich": true
+  }
+ ]
+}

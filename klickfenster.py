@@ -29,6 +29,7 @@ import os
 import cv2
 import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib.artist import Artist
 
 import daten
 import ebene
@@ -56,6 +57,68 @@ def _matplotlib_tasten_freigeben():
     for schluessel in list(plt.rcParams.keys()):
         if schluessel.startswith("keymap."):
             plt.rcParams[schluessel] = [t for t in plt.rcParams[schluessel] if t not in EIGENE_TASTEN]
+
+
+class _Bildschirmbild(Artist):
+    """Zeichnet den sichtbaren Bildausschnitt direkt in Bildschirmauflösung.
+
+    Ausschneiden + Skalieren mit OpenCV (verkleinern: INTER_AREA, vergrössern: nächster
+    Nachbar, damit einzelne Pixel scharf bleiben) und direkt an den Renderer, ohne die
+    langsame Bildpipeline von matplotlib. Pixel (i, j) deckt [i-0.5, i+0.5] ab, wie bei imshow.
+    """
+
+    zorder = 0
+
+    def __init__(self, fenster):
+        super().__init__()
+        self.fenster = fenster
+        self._pyramiden = {}              # Bildname -> [(Faktor, Bild)] mit Faktor 1, 2, 4
+
+    def _pyramide(self, name):
+        if name not in self._pyramiden:
+            stufen = [(1, self.fenster.bilder[name])]
+            for _ in range(2):            # halbe und viertel Auflösung, für weit herausgezoomt
+                f, b = stufen[-1]
+                stufen.append((2 * f, cv2.resize(b, (b.shape[1] // 2, b.shape[0] // 2),
+                                                 interpolation=cv2.INTER_AREA)))
+            self._pyramiden[name] = stufen
+        return self._pyramiden[name]
+
+    def draw(self, renderer):
+        if not self.get_visible():
+            return
+        ax = self.fenster.ax
+        x0, x1 = sorted(ax.get_xlim())
+        y0, y1 = sorted(ax.get_ylim())
+        # gröbste Stufe, die immer noch mindestens ein Bildpixel pro Bildschirmpixel hat
+        bildschirm_pro_pixel = ax.bbox.width / max(x1 - x0, 1e-9)
+        f, bild = next((f, b) for f, b in reversed(self._pyramide(self.fenster.bild_name))
+                       if f == 1 or f * bildschirm_pro_pixel <= 1)
+        hoehe, breite = bild.shape[:2]
+        # in Koordinaten der Stufe: Pixel j deckt Original [f*j - 0.5, f*(j+1) - 0.5] ab
+        s0, s1 = max(int(np.floor((x0 + 0.5) / f)), 0), min(int(np.ceil((x1 + 0.5) / f)), breite)
+        z0, z1 = max(int(np.floor((y0 + 0.5) / f)), 0), min(int(np.ceil((y1 + 0.5) / f)), hoehe)
+        if s1 <= s0 or z1 <= z0:
+            return
+        # Ecken des Ausschnitts auf dem Bildschirm (Bildschirm-y zeigt nach oben)
+        (u0, v0), (u1, v1) = ax.transData.transform([(f * s0 - 0.5, f * z0 - 0.5),
+                                                      (f * s1 - 0.5, f * z1 - 0.5)])
+        links, rechts = sorted((u0, u1))
+        unten, oben = sorted((v0, v1))
+        b, h = int(round(rechts - links)), int(round(oben - unten))
+        if b < 1 or h < 1:
+            return
+        teil = bild[z0:z1, s0:s1]
+        if v0 < v1:                       # y-Achse nicht umgekehrt -> Bild spiegeln
+            teil = teil[::-1]
+        if u0 > u1:
+            teil = teil[:, ::-1]
+        art = cv2.INTER_AREA if b < teil.shape[1] else cv2.INTER_NEAREST
+        teil = cv2.resize(np.ascontiguousarray(teil), (b, h), interpolation=art)
+        gc = renderer.new_gc()
+        gc.set_clip_rectangle(ax.bbox)
+        renderer.draw_image(gc, int(round(links)), int(round(unten)), teil[::-1].copy())
+        gc.restore()
 
 
 class Klickfenster:
@@ -98,7 +161,7 @@ class Klickfenster:
             bild = cv2.imread(pfad)
             pruefe_groesse(bild.shape[1], bild.shape[0], groesse)
             entzerrt = cv2.remap(bild, karte1, karte2, cv2.INTER_CUBIC)
-            bilder[name] = cv2.cvtColor(entzerrt, cv2.COLOR_BGR2RGB)
+            bilder[name] = cv2.cvtColor(entzerrt, cv2.COLOR_BGR2RGBA)   # RGBA: matplotlib zeichnet schneller
         if not bilder:
             raise SystemExit(f"Keine Kompositbilder für '{self.clip}' in {ordner} gefunden "
                              f"(zuerst kompositbild.py laufen lassen).")
@@ -128,8 +191,20 @@ class Klickfenster:
         self.hilfe = self.fig.text(0.01, 0.955, HILFE, va="top", ha="left", fontsize=8)
 
         self.bild_name = next(iter(self.bilder))
-        self.im = self.ax.imshow(self.bilder[self.bild_name], interpolation="nearest")
+        hoehe, breite = self.bilder[self.bild_name].shape[:2]
+        # Kein imshow: matplotlib verarbeitet bei jedem Neuzeichnen das ganze 4K-Bild (~300 ms,
+        # egal wie weit gezoomt). _Bildschirmbild schneidet den sichtbaren Teil selbst aus.
+        self.ax.add_artist(_Bildschirmbild(self))
+        self.ax.set_aspect("equal")
+        self.ax.set_xlim(-0.5, breite - 0.5)
+        self.ax.set_ylim(hoehe - 0.5, -0.5)
+        self.ax.set_autoscale_on(False)
         self.ax.set_axis_off()
+        # Bild-Achse "animiert": beim vollen Neuzeichnen wird der Rest (Texte) einmal gerendert
+        # und gemerkt; Zoomen/Verschieben zeichnet danach nur noch die Bild-Achse neu (Blitting).
+        self.ax.set_animated(True)
+        self._hintergrund = None
+        self._ansicht_offen = False
         if self.huelle is not None:
             h = self.huelle.reshape(-1, 2)
             self.ax.plot(np.r_[h[:, 0], h[0, 0]], np.r_[h[:, 1], h[0, 1]], "w--", lw=0.8, alpha=0.7)
@@ -138,14 +213,60 @@ class Klickfenster:
         self.zoom_werkzeug = None          # None, "rein" oder "raus"
         self._zoom_knoepfe = {}
         self._zoom_knoepfe_anlegen()
+        self._schnelles_verschieben()
 
         c = self.fig.canvas
+        self._ansicht_timer = c.new_timer(interval=5)
+        self._ansicht_timer.single_shot = True
+        self._ansicht_timer.add_callback(self._ansicht_zeichnen)
+        c.mpl_connect("draw_event", self._nach_vollzeichnen)
         c.mpl_connect("button_press_event", self._klick)
         c.mpl_connect("key_press_event", self._taste)
         c.mpl_connect("scroll_event", self._mausrad)
         c.mpl_connect("close_event", lambda ev: self.speichern(nur_wenn_inhalt=True))
         self._aktualisieren()
         plt.show()
+
+    # ------------------------------------------------------------------ Schnelles Zeichnen
+
+    def _nach_vollzeichnen(self, ev):
+        """Nach jedem vollen Neuzeichnen: Hintergrund (ohne Bild-Achse) merken, Achse darüber."""
+        self._hintergrund = self.fig.canvas.copy_from_bbox(self.fig.bbox)
+        self.ax.draw(ev.renderer)
+
+    def _ansicht_anfordern(self):
+        """Neue Ansicht (Zoom/Verschieben) zeichnen; mehrere Anfragen kurz nacheinander -> einmal."""
+        if not self._ansicht_offen:
+            self._ansicht_offen = True
+            self._ansicht_timer.start()
+
+    def _ansicht_zeichnen(self):
+        self._ansicht_offen = False
+        c = self.fig.canvas
+        if self._hintergrund is None:
+            c.draw_idle()
+            return
+        c.restore_region(self._hintergrund)
+        self.ax.draw(c.get_renderer())
+        c.blit(self.fig.bbox)
+
+    def _schnelles_verschieben(self):
+        """Hand der Werkzeugleiste: beim Ziehen nur die Bild-Achse neu zeichnen statt alles."""
+        leiste = self.fig.canvas.toolbar
+        if leiste is None or not hasattr(leiste, "drag_pan"):
+            return
+        original = leiste.drag_pan
+
+        def drag_pan(ev):
+            c = self.fig.canvas
+            c.draw_idle = lambda: None        # das volle Neuzeichnen von matplotlib unterdrücken
+            try:
+                original(ev)
+            finally:
+                del c.draw_idle
+            self._ansicht_anfordern()
+
+        leiste.drag_pan = drag_pan
 
     # ------------------------------------------------------------------ Zoom
 
@@ -215,7 +336,7 @@ class Klickfenster:
             neue.append((klein, gross) if na < nb else (gross, klein))   # Richtung (y umgekehrt) behalten
         self.ax.set_xlim(neue[0])
         self.ax.set_ylim(neue[1])
-        self.fig.canvas.draw_idle()
+        self._ansicht_anfordern()
 
     def _mausrad(self, ev):
         if ev.inaxes is self.ax and ev.xdata is not None:
@@ -262,8 +383,7 @@ class Klickfenster:
         elif t in ("1", "2", "3", "4"):
             name = BILDER[int(t) - 1][0]
             if name in self.bilder:
-                self.bild_name = name
-                self.im.set_data(self.bilder[name])
+                self.bild_name = name             # Ausschnitt kommt beim Neuzeichnen
             else:
                 self.meldung = f"Bild '{name}' nicht vorhanden"
         elif t == "z":

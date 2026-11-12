@@ -145,6 +145,28 @@ Sobald Bodenlinie und ≥ 2 Pfosten geklickt sind, zeigt das Fenster Meter an (u
 
 Optionen: `python strahl.py fit --help` (z.B. `--grad-x 3`, `--mit-protokoll-aufprall`, global `--sigma-klick 3`).
 
+### Geometriemodell (`geometrie.py`)
+
+Erklärung und Begründung der Modellwahl (D2 gewählt, A3 als Vergleich): `strahlmodell_D2_A3.md`.
+
+```bash
+python strahl.py fit --modell geometrie           # → auswertung/*_geometrie.*, fit_modell_geometrie.npz/.json
+python strahl.py vergleich                        # Modelle A/B/C/C1/C2, leave-one-run-out → vergleich.txt/.png
+python strahl.py winkel 8 0                       # Ziel 8 m vor / 0 m über dem Servo-Drehpunkt → θ ± σ_θ
+python strahl.py winkel 9 0 --bezug boden         # Ziel in Versuchskoordinaten
+```
+
+Die Kurve beginnt an der Düse und hat dort die Richtung der Düse:
+
+- **Düse:** Spitze = Servo-Drehpunkt + Arm, `x_d = x_p + L cos θ − h sin θ`, `z_d = z_p + L sin θ + h cos θ`, aus den geklickten Düsenpunkten aller Clips gefittet (mittelt den Klickfehler heraus; `--ursprung klick` nimmt stattdessen die Düse jedes Clips).
+- **Strahl:** `Δz = tan(θ+δ)·Δx + sec²θ·a(t)·Δx² + sec³θ·b(t)·Δx³`, `Δx = x − x_d`. δ = Abweichung der Strahlrichtung vom gemessenen Düsenwinkel (ein Wert für alle Winkel). sec²θ/sec³θ: Abhängigkeit vom Winkel bei konstanter Pumpe (Wurf mit Luftwiderstand, führende Ordnung). Der x³-Term beschreibt die Asymmetrie durch den Luftwiderstand (absteigender Ast steiler). `--grad-x 2` = Parabel, `--grad-theta 1/2` = zusätzliche Korrektur in t = θ/30°.
+- **Streuung von Schuss zu Schuss:** pro Clip ein zusätzlicher Winkel ε_k (σ_ε) und eine zusätzliche Krümmung α_k (σ_α), dazu ein Faktor f auf die Klick-σ. Alle drei werden aus den Daten geschätzt (REML). Das Modell gibt darum zwei Unsicherheiten: σ der mittleren Kurve (Band) und σ eines neuen Schusses (gepunktet), die für das Zielen zählt.
+- **Umkehrung** (`winkel`, `GeometrieModell.winkel_fuer_ziel`): nur im gemessenen Winkelbereich und zwischen Düse und Landepunkt, sonst „nicht erreichbar“ (keine Extrapolation). σ_θ = σ_z(neuer Schuss) / |∂z/∂θ|. θ ist absolut; für die Drohne noch θ_rel = θ − Neigung (IMU) und die Servo-Kalibrierung.
+- **Winkeloffset δ(θ):** `--grad-delta 2` erlaubt δ(θ) = δ_0 + δ_1·t + δ_2·t² statt eines festen δ (Abweichung zwischen gemessenem Winkel und Strahlrichtung, abhängig vom Winkel).
+- **Vergleich:** A = freie Parabel (Basis), A3/A3' = freies Polynom bis x³ (Koeffizienten Grad 2 bzw. 1 in θ), B = Geometrie-Parabel, C = Geometrie kubisch, C1/C2 = C mit Korrektur in t bzw. t, t², D = C mit δ(θ), D2 = C2 mit δ(θ) (`fit --modell geometrie --grad-theta 2 --grad-delta 2`). Leave-one-run-out: Fit auf zwei Läufen, Vorhersage des dritten (Fehler des Landepunkts in cm und Winkelfehler in Grad). Dazu eine Tabelle zum Strahlbeginn: RMS der Punkte bis 1,5 m nach der Düse und Strahlrichtung an der Düse − θ (zeigt, ob ein Modell an der Düse physikalisch plausibel bleibt).
+
+Für `dist_angle_mapping.py`: `auswertung/fit_modell_geometrie.json` enthält alle Parameter und die Formel; `geometrie.lade_geometrie(pfad).winkel_fuer_ziel(x, z)` löst pro Ziel.
+
 ## So funktioniert die Kalibrierung
 
 **Kameramodell (OpenCV):** Kameramatrix `K` mit Brennweite `fx, fy` und Bildmitte `cx, cy`, dazu Verzerrung `D = (k1, k2, p1, p2, k3)`. Radial (k): Punkte werden mit wachsendem Abstand von der Bildmitte nach aussen/innen geschoben. Tangential (p): Linse nicht ganz parallel zum Sensor.

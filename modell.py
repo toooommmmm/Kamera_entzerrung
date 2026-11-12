@@ -308,7 +308,9 @@ def speichere_tabelle(zeilen, pfad):
             w.writerow({k: (round(v, 5) if isinstance(v, float) else v) for k, v in z.items()})
 
 
-def plots(modell, clips, zeilen, ordner):
+def plots(modell, clips, zeilen, ordner, endung_name=""):
+    """bahnen/residuen/aufprall{endung_name}.png. Funktioniert auch mit geometrie.GeometrieModell
+    (Kurve ab der Düse, gepunktet ±1σ neuer Schuss, Residuen auch zur Kurve des Clips)."""
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
@@ -343,10 +345,15 @@ def plots(modell, clips, zeilen, ordner):
         pts = [z for z in zeilen if z["clip"] in namen]
         xl, _ = modell.aufprall(th)
         x_ende = xl if np.isfinite(xl) else max([p["x"] for p in pts] + [1.0])
-        xs = np.linspace(0, x_ende, 200)
+        x0 = modell.x_start(th) if hasattr(modell, "x_start") else 0.0
+        xs = np.linspace(x0, x_ende, 200)
         zs, ss = modell.z(xs, th), modell.sigma_z(xs, th)
         ax.plot(xs, zs, "-", color=f, lw=1)
         ax.fill_between(xs, zs - ss, zs + ss, color=f, alpha=0.15, lw=0)
+        if hasattr(modell, "sigma_schuss"):
+            sn = modell.sigma_schuss(xs, th)
+            ax.plot(xs, zs - sn, ":", color=f, lw=0.7)
+            ax.plot(xs, zs + sn, ":", color=f, lw=0.7)
         ax.plot([], [], "-o", color=f, ms=3,
                 label=f"θ = {th:g}° ({', '.join(c['clip'] for c in gruppe)})")
     ax.plot([], [], "v", color="gray", mec="k", label="Aufprall geklickt (Bild)")
@@ -354,29 +361,36 @@ def plots(modell, clips, zeilen, ordner):
     ax.axhline(0, color="k", lw=0.6)
     ax.set_xlabel("horizontaler Abstand x [m]")
     ax.set_ylabel("Höhe über Boden z [m]")
-    ax.set_title("Strahl-Mittellinie: Messpunkte und gemeinsamer Fit (Band = ±1σ)\n"
+    ax.set_title("Strahl-Mittellinie: Messpunkte und gemeinsamer Fit (Band = ±1σ"
+                 + (", punktiert = ±1σ neuer Schuss" if hasattr(modell, "sigma_schuss") else "") + ")\n"
                  "θ = gemessener Düsenwinkel (messungen.csv)", fontsize=10)
     ax.legend(fontsize=8, ncol=2)
     ax.grid(alpha=0.3)
     fig.tight_layout()
-    for endung in ("png", "pdf"):
-        fig.savefig(os.path.join(ordner, f"bahnen.{endung}"), dpi=150)
+    for endung in ("png",):
+        fig.savefig(os.path.join(ordner, f"bahnen{endung_name}.{endung}"), dpi=150)
     plt.close(fig)
 
-    # 2. Residuen
-    fig, ax = plt.subplots(figsize=(10, 4))
-    for z in zeilen:
-        marker = "v" if z["art"] == "aufprall_log" else "o"
-        ax.errorbar(z["x"], z["residuum"] * 100, yerr=z["sigma_eff"] * 100, fmt=marker, ms=3,
-                    color=farbe(z["theta"]), elinewidth=0.7)
-    ax.axhline(0, color="k", lw=0.6)
-    ax.set_xlabel("x [m]")
-    ax.set_ylabel("Residuum z - Modell [cm]")
-    ax.set_title("Residuen (Fehlerbalken = σ_eff)")
-    ax.grid(alpha=0.3)
+    # 2. Residuen (Geometriemodell: oben zur mittleren Kurve, unten zur Kurve des Clips)
+    bedingt = all("residuum_clip" in z for z in zeilen)
+    fig, achsen = plt.subplots(2 if bedingt else 1, 1, figsize=(10, 6.5 if bedingt else 4), sharex=True)
+    achsen = np.atleast_1d(achsen)
+    titel = (["zur mittleren Kurve (enthält Streuung von Schuss zu Schuss)",
+              "zur Kurve des Clips (mit ε_k, α_k): Form der Kurve"] if bedingt
+             else ["Residuen (Fehlerbalken = σ_eff)"])
+    for ax, schluessel, tt in zip(achsen, ("residuum", "residuum_clip"), titel):
+        for z in zeilen:
+            marker = "v" if z["art"] in ("aufprall", "aufprall_log") else "o"
+            ax.errorbar(z["x"], z[schluessel] * 100, yerr=z["sigma_eff"] * 100, fmt=marker, ms=3,
+                        color=farbe(z["theta"]), elinewidth=0.7)
+        ax.axhline(0, color="k", lw=0.6)
+        ax.set_ylabel("Residuum z - Modell [cm]")
+        ax.set_title(tt, fontsize=10)
+        ax.grid(alpha=0.3)
+    achsen[-1].set_xlabel("x [m]")
     fig.tight_layout()
-    for endung in ("png", "pdf"):
-        fig.savefig(os.path.join(ordner, f"residuen.{endung}"), dpi=150)
+    for endung in ("png",):
+        fig.savefig(os.path.join(ordner, f"residuen{endung_name}.{endung}"), dpi=150)
     plt.close(fig)
 
     # 3. Aufprallweite über dem Winkel
@@ -386,6 +400,10 @@ def plots(modell, clips, zeilen, ordner):
     xl = np.array([modell.aufprall(t) for t in ths])
     ax.plot(ths, xl[:, 0], "-", color="C0", label="Modell")
     ax.fill_between(ths, xl[:, 0] - xl[:, 1], xl[:, 0] + xl[:, 1], color="C0", alpha=0.2, lw=0)
+    if hasattr(modell, "sigma_schuss"):
+        xs = np.array([modell.aufprall(t, schuss=True) for t in ths])
+        ax.plot(ths, xs[:, 0] - xs[:, 1], ":", color="C0", lw=0.8, label="±1σ neuer Schuss")
+        ax.plot(ths, xs[:, 0] + xs[:, 1], ":", color="C0", lw=0.8)
     for c in clips:
         if c["aufprall_log"] is not None:
             ax.plot(c["theta"], c["aufprall_log"], "s", mfc="none", color=farbe(c["theta"]))
@@ -401,6 +419,6 @@ def plots(modell, clips, zeilen, ordner):
     ax.legend(fontsize=8)
     ax.grid(alpha=0.3)
     fig.tight_layout()
-    for endung in ("png", "pdf"):
-        fig.savefig(os.path.join(ordner, f"aufprall.{endung}"), dpi=150)
+    for endung in ("png",):
+        fig.savefig(os.path.join(ordner, f"aufprall{endung_name}.{endung}"), dpi=150)
     plt.close(fig)

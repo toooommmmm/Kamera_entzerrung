@@ -1,16 +1,16 @@
 # Water jet model: D2 (chosen) and A3 (benchmark)
 
-Data: field test of 06.11.2026, 19 clicked clips (all except `15` and `20`), 3 runs, measured
+Data: field test of 06.11.2026, 18 clicked clips (all except `10`, `15` and `20`), 3 runs, measured
 nozzle angles θ = −3° … 25°. All numbers below come from `python strahl.py vergleich` and
 `python strahl.py fit ...` on these data (12.11.2026).
 The figures are in `auswertung/`, which is not in git. Run the commands in section 6 to recreate them.
 
-**Summary.** Both models predict equally well: about **40 cm** landing error and **0.7°** angle error
+**Summary.** Both models predict equally well: about **30 cm** landing error and **0.8°** angle error
 for a run they were not fitted on. **D2** is the chosen model. It starts at the nozzle, in the direction
 the nozzle points. It knows how much the jet scatters from shot to shot, so its uncertainties are honest
 (on the safe side). And it can be inverted directly: target → nozzle angle. **A3** is a free polynomial.
 It serves as an empirical benchmark, but its curve near the nozzle has no physical meaning, and it
-underestimates its own uncertainty by a factor of 2–4.
+underestimates its own uncertainty by a factor of 1.5–5.
 
 ---
 
@@ -31,12 +31,12 @@ c_j(θ)  = p0j + p1j·t + p2j·t²
 - 4 × 3 = **12 parameters**, all free. The fit is linear (weighted least squares, `modell.fit`). Each point is weighted
   by its click uncertainty (converted to metres) and, for the landing point, by the width of the spray cone.
 - It is the original model `strahl.py fit` with `--grad-x 3` instead of 2.
-- Uncertainty: the scatter around the curve is larger than the click errors explain (χ²_red = 2.6), so all σ are
+- Uncertainty: the scatter around the curve is larger than the click errors explain (χ²_red = 2.0), so all σ are
   scaled up by √χ²_red. There is no separate term for the scatter between shots.
 
 **Why x³ at all?** Drag makes the jet slow down along its path, so the descending branch is steeper
 than the ascending one. A parabola is symmetric and cannot show that. Going from the free parabola (A)
-to A3 halves the angle error (1.44° → 0.74°).
+to A3 cuts the landing error from 37 to 30 cm and the angle error by a third (1.18° → 0.79°).
 
 ## 3. Model D2: tied to the nozzle geometry
 
@@ -49,9 +49,9 @@ x_d(θ) = x_p + L·cos θ − h·sin θ
 z_d(θ) = z_p + L·sin θ + h·cos θ
 ```
 
-These four constants are fitted from the clicked nozzle tips of all 19 clips:
+These four constants are fitted from the clicked nozzle tips of all 18 clips:
 pivot x_p = −1.04 m, z_p = 1.25 m, arm L = 0.90 m, h = +0.05 m (offset across the nozzle axis).
-The clicked nozzles lie within 2.3 cm (x) and 1.6 cm (z) of this circle (RMS). Only clip `5` is off by 7 cm.
+The clicked nozzles lie within 2.4 cm (x) and 1.6 cm (z) of this circle (RMS). Only clip `5` is off by 7 cm.
 Using the fitted circle instead of each clip's own click averages out the click error,
 and it gives the nozzle position for any angle, which the drone needs.
 
@@ -80,9 +80,9 @@ What each term does:
 That gives **9 fixed parameters**. Fitted values:
 
 ```
-δ(θ):  −3°: +1.4 ± 1.1°   4°: −0.1 ± 0.6°   11°: −1.0 ± 0.8°   18°: −1.3 ± 0.7°   25°: −1.0 ± 1.3°
-a0 = −0.0145   a1 = +0.054   a2 = −0.052
-b0 = −0.0019   b1 = −0.0078  b2 = +0.0077
+δ(θ):  −3°: +1.5 ± 0.9°   4°: −0.2 ± 0.6°   11°: −1.2 ± 0.7°   18°: −1.4 ± 0.6°   25°: −1.0 ± 1.1°
+a0 = −0.0133   a1 = +0.090   a2 = −0.099
+b0 = −0.0021   b1 = −0.0123  b2 = +0.0139
 ```
 
 The exit offset δ stays within about ±1.5°. That is plausible for an inclinometer with 1° steps
@@ -90,7 +90,7 @@ plus small effects of the nozzle geometry.
 
 ### 3.3 Scatter from shot to shot
 
-Shots at the same measured angle land up to 0.8 m apart (e.g. 20_a 9.76 m and 20_b 9.02 m, both 15°).
+Shots at the same measured angle land up to 0.6 m apart (e.g. 5 at 7.87 m and 5_b at 7.28 m, both 2°).
 Click errors don't explain this. D2 therefore gives every clip two random deviations from the mean curve:
 
 ```
@@ -103,9 +103,9 @@ and scales the assumed click uncertainty by a factor f. The three numbers are es
 
 | | Value | Meaning |
 |---|---|---|
-| σ_ε | 1.5° | per-shot angle scatter: angle reading + exit direction |
-| σ_α | 0.0049 1/m | per-shot curvature scatter (pump, wind); ±32 cm in height at 8 m |
-| f | 0.65 | the clicks are more precise than the assumed 3 px |
+| σ_ε | 1.3° | per-shot angle scatter: angle reading + exit direction |
+| σ_α | 0.0038 1/m | per-shot curvature scatter (pump, wind); ±24 cm in height at 8 m |
+| f | 0.51 | the clicks are more precise than the assumed 3 px |
 
 From this, D2 gives two uncertainties:
 
@@ -133,15 +133,16 @@ Two error measures:
 
 | Model | Params | Landing RMS (mean, max) | Angle RMS | Angle per run 1 / 2 / 3 |
 |---|---|---|---|---|
-| A: free parabola (old) | 9 | 54 cm (+21, 112) | 1.44° | 1.37 / 1.12 / 1.74 |
-| **A3: free cubic** | 12 | 42 cm (+6, 84) | 0.74° | 0.79 / 0.69 / 0.74 |
-| C: tied cubic, θ-dependence from sec only | 3 | 55 cm (+1, 119) | 1.01° | 0.85 / 0.70 / 1.33 |
-| **D2: tied cubic + t, t², δ(θ)** | 9 | **40 cm (−1, 84)** | **0.72°** | 0.56 / 0.83 / 0.70 |
+| A: free parabola (old) | 9 | 37 cm (+17, 64) | 1.18° | 1.28 / 1.03 / 1.25 |
+| **A3: free cubic** | 12 | **30 cm (+2, 62)** | **0.79°** | 0.66 / 0.93 / 0.69 |
+| C: tied cubic, θ-dependence from sec only | 3 | 50 cm (+1, 96) | 0.86° | 0.72 / 0.78 / 1.01 |
+| **D2: tied cubic + t, t², δ(θ)** | 9 | **30 cm (−1, 60)** | **0.80°** | 0.39 / 1.16 / 0.47 |
 
-A3 and D2 are equally good. The difference (0.02°, 2 cm) is far below what 19 clips can resolve.
-Both are clearly better than the old free parabola A and the simple tied cubic C.
+A3 and D2 are equally good. The difference (0.01°, < 1 cm) is far below what 18 clips can resolve.
+Both are better than the old free parabola A (in both measures) and the simple tied cubic C
+(mainly in the landing error; C's angle error is only slightly larger).
 Other variants tried (tied parabola, C with only part of the corrections) are in `auswertung/vergleich.txt`;
-none comes close.
+none is as good in both measures.
 
 ![Comparison of A, A3, C, D2 at four angles](auswertung/vergleich_bahnen.png)
 
@@ -151,22 +152,22 @@ Jet direction at the nozzle minus the measured angle:
 
 | Model | −3° | 2° | 6° | 11° | 15° | 20° | 24° | RMS of the points within 1.5 m of the nozzle |
 |---|---|---|---|---|---|---|---|---|
-| A3 | +1.6° | −2.3° | −4.1° | −4.7° | −4.0° | −1.6° | +1.2° | 1.9 cm |
-| D2 | +1.4° | +0.3° | −0.4° | −1.0° | −1.2° | −1.3° | −1.1° | 1.8 cm |
+| A3 | +1.0° | −1.9° | −3.3° | −3.8° | −3.3° | −1.6° | +0.3° | 1.8 cm |
+| D2 | +1.5° | +0.2° | −0.5° | −1.2° | −1.4° | −1.4° | −1.1° | 1.8 cm |
 
-A3 lets the jet leave up to 4.7° below the nozzle direction, then bends it back up with extra curvature.
+A3 lets the jet leave up to 3.8° below the nozzle direction, then bends it back up with extra curvature.
 Both models fit the points near the nozzle equally well, so the data do not ask for this: A3 just has the
 freedom to trade slope against curvature. A water jet leaves along the nozzle axis, and D2 respects that.
 A3 is a good interpolator *inside* the measured data, but its coefficients have no physical meaning.
 
 ### 4.3 Honest uncertainties: D2 knows about shot scatter, A3 does not
 
-Predicted uncertainty of the landing point vs. the error actually found in LORO (≈ 40 cm):
+Predicted uncertainty of the landing point vs. the error actually found in LORO (≈ 30 cm):
 
-| Model | Predicted σ of the landing point | Compared with the real 40 cm |
+| Model | Predicted σ of the landing point | Compared with the real 30 cm |
 |---|---|---|
-| A3 | 6–21 cm | **2–4× too optimistic**: it treats the scatter between shots as if it were known |
-| D2, σ_shot | 62–79 cm | about 1.6× **on the safe side**: all 19 clicked landing points lie inside ±1σ |
+| A3 | 6–20 cm | **1.5–5× too optimistic**: it treats the scatter between shots as if it were known |
+| D2, σ_shot | 44–66 cm | about 1.7× **on the safe side**: 17 of the 18 clicked landing points lie inside ±1σ (clip 5 just outside: 54 vs. 52 cm) |
 
 For aiming, an uncertainty that is too small is dangerous (overconfident). One that is somewhat too large
 is acceptable. Also, only D2 separates "how well do we know the curve" from "how much does a single shot scatter".
@@ -188,10 +189,10 @@ is acceptable. Also, only D2 separates "how well do we know the curve" from "how
 ### 4.5 Where D2 is weak (state these openly)
 
 - **Edges of the angle range.** With t² terms, the curve is less constrained at −3° and 24–25°
-  (σ_curve of the landing point 0.33–0.39 m there, 0.20 m in the middle).
-- **Uncertainties too large.** σ_shot is about 1.6× too large (section 4.3). One reason: some of what is counted
+  (σ_curve of the landing point 0.27–0.33 m there, 0.15 m in the middle).
+- **Uncertainties too large.** σ_shot is about 1.7× too large (section 4.3). One reason: some of what is counted
   as curvature scatter may really be error in clicking the landing point (the spray cone). The data cannot separate the two.
-- **Parameter σ too small.** In a synthetic test (20 simulated data sets drawn from D2 itself), the parameters and
+- **Parameter σ too small.** In a synthetic test (run on the earlier click data set, 19 clips; not repeated) (20 simulated data sets drawn from D2 itself), the parameters and
   the scatter values were recovered without bias, but the σ of the strongly correlated parameters δ0, a0, b0 came out
   1.5–1.8× too small. This hardly affects aiming, because σ_shot is dominated by the scatter terms, which were recovered correctly.
 - **No exit speed.** The coefficients don't give a realistic exit speed (drag is too strong for the leading-order
@@ -219,15 +220,15 @@ is acceptable. Also, only D2 separates "how well do we know the curve" from "how
 
 | Target x, z | Meaning | θ | σ_θ | σ_shot at the target |
 |---|---|---|---|---|
-| 4.0 m, +1.5 m | high, close | 23.0° | 1.6° | 12 cm |
-| 5.0 m, +1.0 m | | 15.1° | 1.8° | 15 cm |
-| 6.0 m, 0 m | pivot height | 5.3° | 2.0° | 19 cm |
-| 8.0 m, 0 m | pivot height | 11.1° | 2.9° | 34 cm |
-| 8.0 m, −1.25 m | ground of the test site | 0.1° | 3.0° | 33 cm |
-| 10.0 m, −1.25 m | ground of the test site | 11.1° | 4.2° | 52 cm |
+| 4.0 m, +1.5 m | high, close | 22.9° | 1.5° | 11 cm |
+| 5.0 m, +1.0 m | | 14.6° | 1.6° | 13 cm |
+| 6.0 m, 0 m | pivot height | 4.9° | 1.6° | 16 cm |
+| 8.0 m, 0 m | pivot height | 11.1° | 2.4° | 28 cm |
+| 8.0 m, −1.25 m | ground of the test site | 0.3° | 2.4° | 27 cm |
+| 10.0 m, −1.25 m | ground of the test site | 12.5° | 3.3° | 42 cm |
 
 How to read this: close targets can be hit within about 15 cm. At ground level, 8–10 m away,
-a single shot scatters by ±35–50 cm. That comes from the jet itself (pump, wind), not from the model.
+a single shot scatters by ±25–40 cm. That comes from the jet itself (pump, wind), not from the model.
 σ_θ is the angle that corresponds to this scatter. It does not mean the computed angle is wrong by that much.
 
 ### 5.3 Commands and code

@@ -122,12 +122,6 @@
    "im_kalibrierten_bereich": true
   },
   {
-   "typ": "aufprall",
-   "x": 1133.43,
-   "y": 1425.8,
-   "im_kalibrierten_bereich": true
-  },
-  {
    "typ": "pfosten_marke",
    "x": 2822.39,
    "y": 1369.28,
@@ -236,6 +230,12 @@
    "y": 863.5,
    "pfosten": "P5",
    "marke_k": 1,
+   "im_kalibrierten_bereich": true
+  },
+  {
+   "typ": "aufprall",
+   "x": 1127.49,
+   "y": 1423.4,
    "im_kalibrierten_bereich": true
   }
  ]

@@ -228,15 +228,15 @@
    "im_kalibrierten_bereich": true
   },
   {
-   "typ": "aufprall",
-   "x": 629.12,
-   "y": 1409.88,
-   "im_kalibrierten_bereich": true
-  },
-  {
    "typ": "strahl",
    "x": 2305.38,
    "y": 800.37,
+   "im_kalibrierten_bereich": true
+  },
+  {
+   "typ": "aufprall",
+   "x": 841.22,
+   "y": 1379.51,
    "im_kalibrierten_bereich": true
   }
  ]

@@ -2,7 +2,9 @@
 
   python strahl.py klicken 0_a   Schritt 3 (+4 live): Klickfenster für einen Clip
   python strahl.py metrisch      Schritt 4: alle geklickten Clips in Meter -> Tabelle
-  python strahl.py fit           Schritte 5+6: gemeinsamer Fit, Unsicherheiten, Plots
+  python strahl.py fit           Schritte 5+6: gemeinsamer Fit (Standard: Modell E0, einfach.py),
+                                 Unsicherheiten, Plots -> auswertung/*_einfach.*
+  python strahl.py vergleich     alle Modelle, leave-one-run-out
 
 Daten:
   komposite/<clip>/<clip>_*.png  aus kompositbild.py (Originalpixel, werden beim Laden entzerrt)
@@ -23,6 +25,10 @@ import daten
 import modell
 
 HIER = os.path.dirname(os.path.abspath(__file__))
+
+# Düse der Drohne (Modell E). Überschreibbar mit --duese-L / --duese-h.
+DUESE_L = 0.81   # [m] Drehpunkt -> Düsenaustritt entlang der Düsenachse. None: L aus den Klicks fitten
+DUESE_H = 0.0    # [m] Versatz des Austritts quer zur Achse (reale Drohne: 0)
 
 
 def befehl_klicken(args):
@@ -100,6 +106,8 @@ def _einstellungen(args):
 def befehl_fit(args):
     if args.modell == "geometrie":
         return befehl_fit_geometrie(args)
+    if args.modell == "einfach":
+        return befehl_fit_einfach(args)
     clips = _clips(args)
     args.grad_x = 2 if args.grad_x is None else args.grad_x
     args.grad_theta = 2 if args.grad_theta is None else args.grad_theta
@@ -149,12 +157,42 @@ def befehl_fit_geometrie(args):
           f"kurven_geometrie.csv, fit_modell_geometrie.npz/.json, bahnen/residuen/aufprall_geometrie.png")
 
 
+def _duese_masse(args):
+    """(L, h); L = None: L aus den Klicks fitten (h fest)."""
+    return (args.duese_L, args.duese_h)
+
+
+def befehl_fit_einfach(args):
+    import einfach
+    clips = _clips(args)
+    masse = _duese_masse(args)
+    grad_theta = 2 if args.grad_theta is None else args.grad_theta
+    m, zeilen, info = einfach.fit_einfach(clips, grad_theta, args.grad_d, duese_masse=masse,
+                                          mit_video_aufprall=not args.ohne_bild_aufprall,
+                                          mit_log_aufprall=args.mit_protokoll_aufprall)
+    einstellungen = _einstellungen(args)
+    text = einfach.duese_vergleich(clips, masse) + "\n\n" + einfach.zusammenfassung(m, clips, zeilen, info)
+    print(einstellungen)
+    print(text)
+    os.makedirs(args.ausgabe, exist_ok=True)
+    with open(os.path.join(args.ausgabe, "fit_ergebnis_einfach.txt"), "w", encoding="utf-8") as f:
+        f.write(einstellungen + "\n\n" + text + "\n")
+    modell.speichere_tabelle(zeilen, os.path.join(args.ausgabe, "fit_punkte_einfach.csv"))
+    einfach.speichere(m, os.path.join(args.ausgabe, "fit_modell_einfach.json"))
+    modell.plots(m, clips, zeilen, args.ausgabe, "_einfach")
+    print(f"Gespeichert in {args.ausgabe}/: fit_ergebnis_einfach.txt, fit_punkte_einfach.csv, "
+          f"fit_modell_einfach.json, bahnen/residuen/aufprall_einfach.png")
+
+
 def befehl_vergleich(args):
+    import einfach
     import geometrie
     clips = _clips(args)
+    masse = _duese_masse(args)
     varianten = geometrie.modell_varianten(mit_video_aufprall=not args.ohne_bild_aufprall,
-                                           mit_log_aufprall=args.mit_protokoll_aufprall)
+                                           mit_log_aufprall=args.mit_protokoll_aufprall, duese_masse=masse)
     text, modelle, _ = geometrie.vergleich(clips, varianten)
+    text = einfach.duese_vergleich(clips, masse) + "\n\n" + text
     einstellungen = _einstellungen(args)
     print(einstellungen)
     print(text)
@@ -215,16 +253,27 @@ def main():
                        help="geklickten Aufprall (Taste a) nicht im Fit verwenden")
         p.add_argument("--mit-protokoll-aufprall", action="store_true",
                        help="Aufprall aus dem Protokoll zusätzlich im Fit verwenden (Standard: nur Vergleich)")
+        p.add_argument("--duese-L", type=float, default=DUESE_L,
+                       help="Modell E: Drehpunkt -> Düsenaustritt entlang der Düsenachse [m] "
+                            f"(Standard DUESE_L = {DUESE_L}; None: aus den Klicks gefittet)")
+        p.add_argument("--duese-h", type=float, default=DUESE_H,
+                       help="Modell E: Versatz des Austritts quer zur Achse [m], > 0 = bei θ=0 über dem Drehpunkt "
+                            f"(Standard DUESE_H = {DUESE_H})")
 
     p = unter.add_parser("fit", help="gemeinsamer Fit + Unsicherheiten + Plots")
     daten_optionen(p)
-    p.add_argument("--modell", choices=("frei", "geometrie"), default="frei",
-                   help="frei: Polynom in x mit Koeffizienten polynomial in θ (Basis, Standard). "
-                        "geometrie: Kurve ab der Düse mit tan(θ+δ), siehe geometrie.py")
+    p.add_argument("--grad-d", type=int, default=-1,
+                   help="einfach: Richtungskorrektur d(t), Grad in t (Standard -1 = keine, exakt tan θ)")
+    p.add_argument("--modell", choices=("einfach", "frei", "geometrie"), default="einfach",
+                   help="einfach (Standard, Modell E0): kubisches Polynom ab der Düse, Startrichtung tan θ, "
+                        "siehe einfach.py und modell_E_einfach.md. "
+                        "frei: Polynom in x mit Koeffizienten polynomial in θ (Modelle A/A3). "
+                        "geometrie: Kurve ab der Düse mit tan(θ+δ) (Modell D2), siehe geometrie.py")
     p.add_argument("--grad-x", type=int, default=None,
                    help="Polynomgrad in x (Standard: frei 2 = Parabel, geometrie 3 = kubisch)")
     p.add_argument("--grad-theta", type=int, default=None,
-                   help="Grad in θ (Standard: frei 2; geometrie 0 = nur sec²θ/sec³θ, 1 = plus Korrektur in t)")
+                   help="Grad in θ (Standard: einfach 2 = c2, c3 quadratisch in t; frei 2; "
+                        "geometrie 0 = nur sec²θ/sec³θ, 1 = plus Korrektur in t)")
     p.add_argument("--grad-delta", type=int, default=0,
                    help="geometrie: Winkeloffset δ(θ) polynomial in t (Standard 0 = ein festes δ, 2 = Modell D)")
     p.add_argument("--ursprung", choices=("fit", "klick"), default="fit",

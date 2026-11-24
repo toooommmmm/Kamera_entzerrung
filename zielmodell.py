@@ -1,25 +1,31 @@
 """Standalone aiming model: target position -> absolute nozzle angle.
 
-Reads the fitted geometry model (fit_modell_geometrie.json, written by geometrie.py) and
-inverts it. Standard library only, so it can be copied into the ROS package as is.
+Reads the fitted jet model E (fit_modell_einfach.json, written by einfach.py in Kamera_entzerrung)
+and inverts it. Standard library only, so it can be copied into the ROS package as is.
 After a refit only the JSON has to be copied again.
 
+Model E (all lengths in m, theta = absolute nozzle angle, t = theta / skala_grad):
+    nozzle exit  x_d = x_p + L cos(theta) - h sin(theta),  z_d = z_p + L sin(theta) + h cos(theta)
+    jet          dz = (tan(theta) + d(t)) dx + a(t) dx^2 + b(t) dx^3,  dx = x - x_d, dz = z - z_d
+                 d, a, b polynomials in t (d optional, grad_d = -1: none)
+    shot scatter variance  s_eps^2 dx^2 + s_alpha^2 dx^4
+
 Usage:
-    m = Zielmodell("fit_modell_geometrie.json")
+    m = Zielmodell("fit_modell_einfach.json")
     r = m.angle_for_target(x, z)      # x, z [m] relative to the servo pivot
     if r.ok:
         command(r.theta)              # absolute nozzle angle [deg], r.sigma_theta = 1-sigma [deg]
     else:
         log(r.reason, r.message)
 
-Conventions (same as geometrie.py):
+Conventions (same as einfach.py):
     x  horizontal distance in the vertical plane of the jet [m], z height [m]
     theta  absolute nozzle angle against the horizon [deg] (inclinometer, not servo command)
     frame="pivot":      x, z relative to the servo pivot (for the drone)
     frame="experiment": x, z in the coordinates of the test setup (posts, ground at z = 0)
 Valid only for theta inside the measured range and between nozzle and landing point.
 
-Quick check:  python zielmodell.py fit_modell_geometrie.json X Z
+Quick check:  python zielmodell.py fit_modell_einfach.json X Z
 """
 
 import json
@@ -50,32 +56,32 @@ class Zielmodell:
     def __init__(self, json_path):
         with open(json_path, encoding="utf-8") as f:
             d = json.load(f)
-        if d.get("art") != "geometrie":
-            raise ValueError(f"{json_path}: model type {d.get('art')!r}, this code only implements 'geometrie'")
-        self.grad_x = int(d["grad_x"])
-        if self.grad_x not in (2, 3):
-            raise ValueError(f"{json_path}: grad_x = {self.grad_x}, expected 2 or 3")
-        nd, n = int(d.get("grad_delta", 0)) + 1, int(d["grad_theta"]) + 1
+        if d.get("art") != "einfach":
+            raise ValueError(f"{json_path}: model type {d.get('art')!r}, this code only implements 'einfach' "
+                             f"(model E, fit_modell_einfach.json)")
+        nd, n = int(d["grad_d"]) + 1, int(d["grad_theta"]) + 1
+        if nd < 0 or n < 1:
+            raise ValueError(f"{json_path}: grad_d = {nd - 1}, grad_theta = {n - 1}, expected >= -1 and >= 0")
         p = [float(v) for v in d["param"]]
-        n_expected = nd + n * (self.grad_x - 1)
+        n_expected = nd + 2 * n
         if len(p) != n_expected:
             raise ValueError(f"{json_path}: {len(p)} parameters, expected {n_expected} for the given degrees")
         self.param = p
-        self.delta_coef = p[:nd]                                       # delta_i [rad]
-        self.a_coef = p[nd:nd + n]                                     # a_i
-        self.b_coef = p[nd + n:nd + 2 * n] if self.grad_x == 3 else []  # b_i
+        self.d_coef = p[:nd]               # d_i: start direction correction [rad], empty if grad_d = -1
+        self.a_coef = p[nd:nd + n]         # a_i: coefficient of dx^2
+        self.b_coef = p[nd + n:]           # b_i: coefficient of dx^3
         self.cov = [[float(v) for v in row] for row in d["kovarianz"]]
         if len(self.cov) != len(p) or any(len(row) != len(p) for row in self.cov):
             raise ValueError(f"{json_path}: covariance is not {len(p)}x{len(p)}")
         self.xp, self.zp, self.L, self.h = (float(v) for v in d["duese"])
         self.scale = float(d["skala_grad"])
         self.theta_min, self.theta_max = (float(v) for v in d["theta_bereich_grad"])
-        self.sigma_eps = float(d.get("sigma_eps_rad", 0.0))
-        self.sigma_alpha = float(d.get("sigma_alpha", 0.0))
+        self.sigma_eps = float(d.get("s_eps_rad", 0.0))     # angle scatter per shot [rad]
+        self.sigma_alpha = float(d.get("s_alpha", 0.0))     # curvature scatter per shot [1/m]
 
     # =======================================================================
-    # Model-specific part (geometry model D2). Swap only this block if the
-    # model family changes; everything below uses nozzle/z/slope/gradient/
+    # Model-specific part (model E). Swap only this block if the model
+    # family changes; everything below uses nozzle/z/slope/gradient/
     # shot_scatter only.
     # =======================================================================
 
@@ -84,44 +90,38 @@ class Zielmodell:
         return sum(c * t ** i for i, c in enumerate(coef))
 
     def nozzle(self, theta):
-        """Nozzle tip (x_d, z_d) [m] in experiment coordinates."""
+        """Nozzle exit (x_d, z_d) [m] in experiment coordinates."""
         r = math.radians(theta)
         return (self.xp + self.L * math.cos(r) - self.h * math.sin(r),
                 self.zp + self.L * math.sin(r) + self.h * math.cos(r))
 
     def _terms(self, X, theta):
-        r, t = math.radians(theta), theta / self.scale
-        sec = 1.0 / math.cos(r)
+        t = theta / self.scale
         xd, zd = self.nozzle(theta)
-        delta = self._poly(self.delta_coef, t)
-        a = sec ** 2 * self._poly(self.a_coef, t)
-        b = sec ** 3 * self._poly(self.b_coef, t)
-        return r, t, sec, xd, zd, X - xd, delta, a, b
+        k1 = math.tan(math.radians(theta)) + self._poly(self.d_coef, t)   # slope at the nozzle
+        return t, zd, X - xd, k1, self._poly(self.a_coef, t), self._poly(self.b_coef, t)
 
     def z(self, X, theta):
         """Jet height [m] at horizontal position X (experiment coordinates)."""
-        r, t, sec, xd, zd, dx, delta, a, b = self._terms(X, theta)
-        return zd + math.tan(r + delta) * dx + a * dx ** 2 + b * dx ** 3
+        t, zd, dx, k1, a, b = self._terms(X, theta)
+        return zd + k1 * dx + a * dx ** 2 + b * dx ** 3
 
     def slope(self, X, theta):
-        r, t, sec, xd, zd, dx, delta, a, b = self._terms(X, theta)
-        return math.tan(r + delta) + 2 * a * dx + 3 * b * dx ** 2
+        t, zd, dx, k1, a, b = self._terms(X, theta)
+        return k1 + 2 * a * dx + 3 * b * dx ** 2
 
     def gradient(self, X, theta):
         """dz/dparam (same order as param)."""
-        r, t, sec, xd, zd, dx, delta, a, b = self._terms(X, theta)
-        c2 = dx / math.cos(r + delta) ** 2
-        g = [c2 * t ** i for i in range(len(self.delta_coef))]
-        g += [sec ** 2 * dx ** 2 * t ** i for i in range(len(self.a_coef))]
-        g += [sec ** 3 * dx ** 3 * t ** i for i in range(len(self.b_coef))]
+        t, zd, dx, k1, a, b = self._terms(X, theta)
+        g = [dx * t ** i for i in range(len(self.d_coef))]
+        g += [dx ** 2 * t ** i for i in range(len(self.a_coef))]
+        g += [dx ** 3 * t ** i for i in range(len(self.b_coef))]
         return g
 
     def shot_scatter(self, X, theta):
-        """Variance [m^2] of a new shot around the mean curve (extra angle eps, extra curvature alpha)."""
-        r, t, sec, xd, zd, dx, delta, a, b = self._terms(X, theta)
-        s_eps = dx / math.cos(r + delta) ** 2 * self.sigma_eps
-        s_alpha = dx ** 2 / math.cos(r) ** 2 * self.sigma_alpha
-        return s_eps ** 2 + s_alpha ** 2
+        """Variance [m^2] of a new shot around the mean curve (angle scatter + curvature scatter)."""
+        t, zd, dx, k1, a, b = self._terms(X, theta)
+        return (self.sigma_eps * dx) ** 2 + (self.sigma_alpha * dx ** 2) ** 2
 
     # =======================================================================
     # Generic part

@@ -503,10 +503,23 @@ def speichere_kurven(m, clips, pfad):
 # Modellvergleich: leave-one-run-out
 # ---------------------------------------------------------------------------
 
-def modell_varianten(mit_video_aufprall=True, mit_log_aufprall=False):
-    """Name -> (Kurzname, Fit-Funktion(clips) -> Modell)."""
+def modell_varianten(mit_video_aufprall=True, mit_log_aufprall=False, duese_masse=None):
+    """Name -> (Kurzname, Fit-Funktion(clips) -> Modell).
+
+    duese_masse = (L, h): Modelle E mit Düse aus der Drohnengeometrie, sonst Düse aus den Klicks."""
+    import einfach
     kw = {"mit_video_aufprall": mit_video_aufprall, "mit_log_aufprall": mit_log_aufprall}
+    ekw = dict(kw, duese_masse=duese_masse)
+    if duese_masse is None:
+        q = "Düse Klick"
+    elif duese_masse[0] is None:
+        q = f"L Klick, h={duese_masse[1]:g}"
+    else:
+        q = "L,h fest"
     return {
+        "E0": (f"einfach, tan θ (6 P., {q})", lambda cl: einfach.fit_einfach(cl, 2, -1, **ekw)[0]),
+        "E1": (f"einfach, tan θ + d (7 P., {q})", lambda cl: einfach.fit_einfach(cl, 2, 0, **ekw)[0]),
+        "E2": (f"einfach, tan θ + d(t) (9 P., {q})", lambda cl: einfach.fit_einfach(cl, 2, 2, **ekw)[0]),
         "A": ("frei, Parabel (9 Param.)",
               lambda cl: basis.fit(cl, 2, 2, mit_log_aufprall=mit_log_aufprall,
                                    mit_video_aufprall=mit_video_aufprall)[0]),
@@ -665,10 +678,12 @@ def vergleich_plots(clips, modelle, ordner):
              "C": ("-", "C Geometrie kubisch"), "C1": ("-.", "C1 kubisch + t"),
              "C2": ((0, (5, 1, 1, 1, 1, 1)), "C2 kubisch + t, t²"),
              "A3": ((0, (8, 2)), "A3 frei kubisch"), "A3'": ((0, (3, 3)), "A3' frei kubisch θ¹"),
-             "D": ((0, (1, 1)), "D Geometrie kubisch, δ(θ)"), "D2": ((0, (6, 2, 1, 2)), "D2 kub. + t, t², δ(θ)")}
+             "D": ((0, (1, 1)), "D Geometrie kubisch, δ(θ)"), "D2": ((0, (6, 2, 1, 2)), "D2 kub. + t, t², δ(θ)"),
+             "E0": ((0, (2, 1)), "E0 einfach, tan θ"), "E1": ((0, (4, 1, 1, 1)), "E1 einfach, tan θ + d"),
+             "E2": ((0, (2, 2, 6, 2)), "E2 einfach, tan θ + d(t)")}
     gruppen = basis.winkel_gruppen(clips)
     # Übersicht nur mit den wichtigsten Modellen (alle in vergleich_residuen)
-    auswahl_m = {n: modelle[n] for n in ("A", "A3", "C", "D2") if n in modelle} or modelle
+    auswahl_m = {n: modelle[n] for n in ("A3", "D2", "E0", "E1") if n in modelle} or modelle
     ths = list(gruppen)
     auswahl = [ths[i] for i in np.unique(np.linspace(0, len(ths) - 1, 4).round().astype(int))]
     fig, ax = plt.subplots(figsize=(10, 5.5))

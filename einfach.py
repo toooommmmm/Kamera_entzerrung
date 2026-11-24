@@ -332,9 +332,12 @@ def zusammenfassung(m, clips, zeilen, info):
     return "\n".join(t)
 
 
-def speichere(m, pfad_json):
+def speichere(m, pfad_json, zusatz=None):
+    """zusatz: weitere Blöcke im JSON, z.B. {"ballistik": ...} (von lade_einfach ignoriert)."""
+    d = m.als_dict()
+    d.update(zusatz or {})
     with open(pfad_json, "w", encoding="utf-8") as f:
-        json.dump(m.als_dict(), f, indent=2, ensure_ascii=False)
+        json.dump(d, f, indent=2, ensure_ascii=False)
 
 
 def lade_einfach(pfad_json):

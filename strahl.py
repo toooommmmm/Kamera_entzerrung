@@ -172,13 +172,19 @@ def befehl_fit_einfach(args):
                                           mit_log_aufprall=args.mit_protokoll_aufprall)
     einstellungen = _einstellungen(args)
     text = einfach.duese_vergleich(clips, masse) + "\n\n" + einfach.zusammenfassung(m, clips, zeilen, info)
+    zusatz = {}
+    if not args.ohne_ballistik:   # Extrapolation unter θ_min für zielmodell.py (modell_E_einfach.md, Abschnitt 10)
+        import ballistik
+        _, block, text_b = ballistik.fit_fuer_ziel(clips, m.duese_param)
+        zusatz["ballistik"] = block
+        text += "\n\n" + text_b
     print(einstellungen)
     print(text)
     os.makedirs(args.ausgabe, exist_ok=True)
     with open(os.path.join(args.ausgabe, "fit_ergebnis_einfach.txt"), "w", encoding="utf-8") as f:
         f.write(einstellungen + "\n\n" + text + "\n")
     modell.speichere_tabelle(zeilen, os.path.join(args.ausgabe, "fit_punkte_einfach.csv"))
-    einfach.speichere(m, os.path.join(args.ausgabe, "fit_modell_einfach.json"))
+    einfach.speichere(m, os.path.join(args.ausgabe, "fit_modell_einfach.json"), zusatz)
     modell.plots(m, clips, zeilen, args.ausgabe, "_einfach")
     print(f"Gespeichert in {args.ausgabe}/: fit_ergebnis_einfach.txt, fit_punkte_einfach.csv, "
           f"fit_modell_einfach.json, bahnen/residuen/aufprall_einfach.png")
@@ -201,6 +207,32 @@ def befehl_vergleich(args):
         f.write(einstellungen + "\n\n" + text + "\n")
     geometrie.vergleich_plots(clips, modelle, args.ausgabe)
     print(f"Gespeichert in {args.ausgabe}/: vergleich.txt, vergleich_bahnen/vergleich_residuen.png")
+
+
+def befehl_ballistik_test(args):
+    import ballistik
+    clips = _clips(args)
+    text, modelle, _, bestanden, val = ballistik.validierung(
+        clips, _duese_masse(args), durchfluss_l_min=args.durchfluss_l_min, duesen_d_mm=args.duesen_d_mm,
+        grad_k=args.grad_k, train_gruppen=tuple(args.train.split(",")), val_gruppen=tuple(args.val.split(",")),
+        final_gruppen=tuple(args.endsatz.split(",")) if args.endsatz else None, mit_weg=args.mit_weg)
+    name = "ballistik_test" + (f"_k{args.grad_k}" if args.grad_k else "") + ("_weg" if args.mit_weg else "")
+    if (args.train, args.val) != ("10,15,20", "5,0"):
+        name += f"_train{args.train.replace(',', '-')}_val{args.val.replace(',', '-')}"
+    einstellungen = _einstellungen(args)
+    print(einstellungen)
+    print(text)
+    os.makedirs(args.ausgabe, exist_ok=True)
+    with open(os.path.join(args.ausgabe, name + ".txt"), "w", encoding="utf-8") as f:
+        f.write(einstellungen + "\n\n" + text + "\n")
+    untertitel = ("ein v0 und ein k für alle Winkel" if args.grad_k == 0 else
+                  f"ein v0 für alle Winkel, Widerstand k(θ) Polynom Grad {args.grad_k} in θ")
+    if args.mit_weg:
+        untertitel += ", Widerstand wächst mit der Flugstrecke: k = k0 + k_s·s"
+    ballistik.plot_validierung(modelle, val, os.path.join(args.ausgabe, name + ".png"), untertitel,
+                               f"Ballistik-Validierung: Fit auf Clips {args.train.replace(',', '/')}, "
+                               f"Vorhersage der flacheren Clips {args.val.replace(',', ' und ')}")
+    print(f"Gespeichert in {args.ausgabe}/: {name}.txt, {name}.png")
 
 
 def befehl_winkel(args):
@@ -262,6 +294,8 @@ def main():
 
     p = unter.add_parser("fit", help="gemeinsamer Fit + Unsicherheiten + Plots")
     daten_optionen(p)
+    p.add_argument("--ohne-ballistik", action="store_true",
+                   help="einfach: keine ballistische Erweiterung unter θ_min ins JSON schreiben")
     p.add_argument("--grad-d", type=int, default=-1,
                    help="einfach: Richtungskorrektur d(t), Grad in t (Standard -1 = keine, exakt tan θ)")
     p.add_argument("--modell", choices=("einfach", "frei", "geometrie"), default="einfach",
@@ -289,6 +323,24 @@ def main():
     p = unter.add_parser("vergleich", help="Modelle A/B/C vergleichen, leave-one-run-out")
     daten_optionen(p)
     p.set_defaults(funktion=befehl_vergleich)
+
+    p = unter.add_parser("ballistik-test",
+                         help="Ballistikmodell (v0, k) auf Clips 10/15/20 fitten, Clips 5 und 0 vorhersagen")
+    daten_optionen(p)
+    p.add_argument("--durchfluss-l-min", type=float, default=None,
+                   help="Pumpendurchfluss [l/min], nur für die Plausibilität von v0 (Q/A)")
+    p.add_argument("--duesen-d-mm", type=float, default=None, help="Düsendurchmesser [mm], nur für Q/A")
+    p.add_argument("--train", default="10,15,20", help="Trainingsclips (Clipnamen ohne _a/_b, Komma-getrennt)")
+    p.add_argument("--val", default="5,0",
+                   help="Validierungsclips, vom kleinsten zum grössten Abstand zum Training (Standard 5,0)")
+    p.add_argument("--endsatz", default=None,
+                   help="zusätzlich auf diesen Clips fitten und mit dem Training vergleichen (z.B. 0,5,10,15)")
+    p.add_argument("--mit-weg", action="store_true",
+                   help="Widerstand wächst linear mit der Flugstrecke s ab der Düse: k = k0 + k_s·s (Strahlzerfall)")
+    p.add_argument("--grad-k", type=int, default=0,
+                   help="Widerstand k(θ) als Polynom in θ/30° (Standard 0 = ein k für alle Winkel, "
+                        "1 = linear). v0 ist immer eine Konstante für alle Winkel")
+    p.set_defaults(funktion=befehl_ballistik_test)
 
     p = unter.add_parser("winkel", help="nötiger Düsenwinkel für ein Ziel (Geometriemodell)")
     p.add_argument("x", type=float, help="horizontaler Abstand des Ziels [m]")
